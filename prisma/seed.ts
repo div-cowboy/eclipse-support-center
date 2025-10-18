@@ -13,19 +13,6 @@ async function main() {
     },
   });
 
-  // Create a sample post
-  await prisma.post.upsert({
-    where: { id: "sample-post-1" },
-    update: {},
-    create: {
-      id: "sample-post-1",
-      title: "Welcome to Eclipse Support Center",
-      content: "This is a sample post to get you started.",
-      published: true,
-      authorId: user.id,
-    },
-  });
-
   console.log("Seed data created successfully!");
 }
 
