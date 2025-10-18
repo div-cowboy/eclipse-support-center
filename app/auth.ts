@@ -12,4 +12,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   ],
   adapter: PrismaAdapter(prisma),
   secret: process.env.NEXTAUTH_SECRET,
+  session: {
+    strategy: "jwt", // Use JWT strategy for better edge runtime compatibility
+  },
+  jwt: {
+    // JWT configuration for middleware compatibility
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
 });
