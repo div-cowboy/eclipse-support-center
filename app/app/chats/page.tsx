@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Table,
   TableBody,
@@ -17,70 +18,89 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/shadcn/ui/card";
-import { MessageSquare, Plus } from "lucide-react";
+import { Bot, Plus, Edit, Trash2, MessageSquare } from "lucide-react";
 
-// Mock data type for chats - replace with actual Prisma types when implemented
-interface Chat {
+// Chatbot type based on Prisma schema
+interface Chatbot {
   id: string;
-  title: string;
+  name: string;
   description?: string;
-  status: "ACTIVE" | "ARCHIVED" | "DELETED";
+  status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
+  config?: any;
   createdAt: Date;
   updatedAt: Date;
-  messageCount: number;
+  _count: {
+    chats: number;
+    contextBlocks: number;
+  };
 }
 
-// Mock data - replace with actual data fetching
-const mockChats: Chat[] = [
+// Mock data for chatbots - replace with actual data fetching
+const mockChatbots: Chatbot[] = [
   {
     id: "1",
-    title: "Eclipse IDE Setup Help",
-    description: "Getting help with Eclipse IDE configuration",
+    name: "Eclipse IDE Support Bot",
+    description:
+      "Helps with Eclipse IDE setup, configuration, and troubleshooting",
     status: "ACTIVE",
     createdAt: new Date("2024-01-15"),
     updatedAt: new Date("2024-01-15"),
-    messageCount: 12,
+    _count: {
+      chats: 12,
+      contextBlocks: 25,
+    },
   },
   {
     id: "2",
-    title: "Java Development Issues",
-    description: "Debugging Java compilation problems",
+    name: "Java Development Assistant",
+    description: "Assists with Java compilation, debugging, and best practices",
     status: "ACTIVE",
     createdAt: new Date("2024-01-14"),
     updatedAt: new Date("2024-01-14"),
-    messageCount: 8,
+    _count: {
+      chats: 8,
+      contextBlocks: 18,
+    },
   },
   {
     id: "3",
-    title: "Plugin Installation",
-    description: "Help with installing Eclipse plugins",
+    name: "Plugin Installation Helper",
+    description:
+      "Guides users through Eclipse plugin installation and management",
     status: "ARCHIVED",
     createdAt: new Date("2024-01-10"),
     updatedAt: new Date("2024-01-12"),
-    messageCount: 5,
+    _count: {
+      chats: 5,
+      contextBlocks: 12,
+    },
   },
 ];
 
 function EmptyState() {
+  const router = useRouter();
+
   return (
     <div className="flex flex-col items-center justify-center py-12">
       <div className="rounded-full bg-muted p-6 mb-4">
-        <MessageSquare className="h-12 w-12 text-muted-foreground" />
+        <Bot className="h-12 w-12 text-muted-foreground" />
       </div>
-      <h3 className="text-lg font-semibold mb-2">No chats yet</h3>
+      <h3 className="text-lg font-semibold mb-2">No chatbots yet</h3>
       <p className="text-muted-foreground text-center mb-6 max-w-sm">
-        Start a conversation to get help with Eclipse development issues. Your
-        chats will appear here.
+        Create your first chatbot to provide intelligent support for Eclipse
+        development issues. Add context blocks to build a knowledge base.
       </p>
-      <Button>
+      <Button onClick={() => router.push("/app/chatbots/new")}>
         <Plus className="h-4 w-4 mr-2" />
-        Start New Chat
+        Create Chatbot
       </Button>
     </div>
   );
 }
 
-function ChatsTable({ chats }: { chats: Chat[] }) {
+function ChatbotsTable({ chatbots }: { chatbots: Chatbot[] }) {
+  const router = useRouter();
+
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat("en-US", {
       year: "numeric",
@@ -95,10 +115,10 @@ function ChatsTable({ chats }: { chats: Chat[] }) {
     switch (status) {
       case "ACTIVE":
         return "bg-green-100 text-green-800";
-      case "ARCHIVED":
+      case "INACTIVE":
         return "bg-yellow-100 text-yellow-800";
-      case "DELETED":
-        return "bg-red-100 text-red-800";
+      case "ARCHIVED":
+        return "bg-gray-100 text-gray-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -107,10 +127,9 @@ function ChatsTable({ chats }: { chats: Chat[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Your Chats</CardTitle>
+        <CardTitle>Your Chatbots</CardTitle>
         <CardDescription>
-          Manage your support conversations and get help with Eclipse
-          development.
+          Manage your AI chatbots and their knowledge bases for Eclipse support.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -118,43 +137,72 @@ function ChatsTable({ chats }: { chats: Chat[] }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Title</TableHead>
+                <TableHead>Name</TableHead>
                 <TableHead>Description</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Messages</TableHead>
+                <TableHead>Chats</TableHead>
+                <TableHead>Context Blocks</TableHead>
                 <TableHead>Last Updated</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {chats.map((chat) => (
-                <TableRow key={chat.id}>
-                  <TableCell className="font-medium">{chat.title}</TableCell>
+              {chatbots.map((chatbot) => (
+                <TableRow key={chatbot.id}>
+                  <TableCell className="font-medium">
+                    <button
+                      onClick={() => router.push(`/app/chatbots/${chatbot.id}`)}
+                      className="flex items-center hover:text-primary transition-colors"
+                    >
+                      <Bot className="h-4 w-4 mr-2 text-muted-foreground" />
+                      {chatbot.name}
+                    </button>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {chat.description || "No description"}
+                    {chatbot.description || "No description"}
                   </TableCell>
                   <TableCell>
                     <span
                       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                        chat.status
+                        chatbot.status
                       )}`}
                     >
-                      {chat.status}
+                      {chatbot.status}
                     </span>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center">
                       <MessageSquare className="h-4 w-4 mr-1 text-muted-foreground" />
-                      {chat.messageCount}
+                      {chatbot._count.chats}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center">
+                      <Bot className="h-4 w-4 mr-1 text-muted-foreground" />
+                      {chatbot._count.contextBlocks}
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {formatDate(chat.updatedAt)}
+                    {formatDate(chatbot.updatedAt)}
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm">
-                      View
-                    </Button>
+                    <div className="flex space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          router.push(`/app/chatbots/${chatbot.id}`)
+                        }
+                      >
+                        View
+                      </Button>
+                      <Button variant="ghost" size="sm">
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -166,14 +214,15 @@ function ChatsTable({ chats }: { chats: Chat[] }) {
   );
 }
 
-export default function ChatsPage() {
-  const [chats, setChats] = useState<Chat[]>([]);
+export default function ChatbotsPage() {
+  const router = useRouter();
+  const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading
+    // Simulate loading - replace with actual API call
     const timer = setTimeout(() => {
-      //   setChats(mockChats);
+      setChatbots(mockChatbots);
       setLoading(false);
     }, 1000);
 
@@ -184,26 +233,26 @@ export default function ChatsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Chats</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Chatbots</h1>
           <p className="text-muted-foreground">
-            Manage your support conversations and get help with Eclipse
-            development issues.
+            Manage your AI chatbots and their knowledge bases for Eclipse
+            support.
           </p>
         </div>
-        <Button>
+        <Button onClick={() => router.push("/app/chatbots/new")}>
           <Plus className="h-4 w-4 mr-2" />
-          New Chat
+          Create Chatbot
         </Button>
       </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-12">
-          <div className="text-muted-foreground">Loading chats...</div>
+          <div className="text-muted-foreground">Loading chatbots...</div>
         </div>
-      ) : chats.length === 0 ? (
+      ) : chatbots.length === 0 ? (
         <EmptyState />
       ) : (
-        <ChatsTable chats={chats} />
+        <ChatbotsTable chatbots={chatbots} />
       )}
     </div>
   );

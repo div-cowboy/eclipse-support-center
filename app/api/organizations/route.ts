@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
+import { Organization } from "@prisma/client";
 
 // GET /api/organizations - Get all organizations for the current user
 export async function GET() {
@@ -21,10 +22,10 @@ export async function GET() {
     }
 
     // Get user's organization if they have one
-    let organizations: any[] = [];
-    if ((user as any).organizationId) {
-      const organization = await (prisma as any).organization.findUnique({
-        where: { id: (user as any).organizationId },
+    let organizations: Organization[] = [];
+    if (user.organizationId) {
+      const organization = await prisma.organization.findUnique({
+        where: { id: user.organizationId },
         include: {
           users: {
             select: { id: true },
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    if ((user as any).organizationId) {
+    if (user.organizationId) {
       return NextResponse.json(
         { error: "User already has an organization" },
         { status: 400 }
@@ -85,7 +86,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if slug is already taken
-    const existingOrg = await (prisma as any).organization.findUnique({
+    const existingOrg = await prisma.organization.findUnique({
       where: { slug },
     });
 
@@ -97,7 +98,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create organization
-    const organization = await (prisma as any).organization.create({
+    const organization = await prisma.organization.create({
       data: {
         name,
         description: description || null,
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
     // Assign user to the organization
     await prisma.user.update({
       where: { id: user.id },
-      data: { organizationId: organization.id } as any,
+      data: { organizationId: organization.id },
     });
 
     return NextResponse.json(organization, { status: 201 });

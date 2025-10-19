@@ -36,19 +36,37 @@ model Organization {
 }
 
 model Chatbot {
-  id             String        @id @default(cuid())
+  id             String         @id @default(cuid())
   name           String
   description    String?
-  status         ChatbotStatus @default(ACTIVE)
+  status         ChatbotStatus  @default(ACTIVE)
   config         Json?
   organizationId String
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
   chats          Chat[]
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contextBlocks  ContextBlock[]
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@index([organizationId])
   @@index([status])
+}
+
+model ContextBlock {
+  id        String           @id @default(cuid())
+  title     String
+  content   String
+  type      ContextBlockType @default(TEXT)
+  metadata  Json?
+  vectorId  String?          @unique // Reference to vector in external vector DB
+  chatbotId String
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  chatbot   Chatbot          @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
+
+  @@index([chatbotId])
+  @@index([type])
+  @@index([vectorId])
 }
 
 model Account {
@@ -135,4 +153,13 @@ enum ChatbotStatus {
   ACTIVE
   INACTIVE
   ARCHIVED
+}
+
+enum ContextBlockType {
+  TEXT
+  CODE
+  DOCUMENTATION
+  FAQ
+  TROUBLESHOOTING
+  TUTORIAL
 }
