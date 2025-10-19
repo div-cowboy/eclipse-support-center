@@ -98,3 +98,7 @@
     color: hsl(var(--foreground));
   }
 }
+
+button:hover {
+  cursor: pointer;
+}

@@ -8,31 +8,52 @@ datasource db {
 }
 
 model User {
-  id             String        @id @default(cuid())
-  name           String?
-  email          String        @unique
-  emailVerified  DateTime?
-  image          String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
-  organizationId String?
-  accounts       Account[]
-  messages       Message[]
-  sessions       Session[]
-  organization   Organization? @relation(fields: [organizationId], references: [id])
+  id                String                 @id @default(cuid())
+  name              String?
+  email             String                 @unique
+  emailVerified     DateTime?
+  image             String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  accounts          Account[]
+  messages          Message[]
+  sessions          Session[]
+  organizations     Organization[]         @relation("OrganizationMembers")
+  uploadedDocuments OrganizationDocument[]
 }
 
 model Organization {
-  id          String    @id @default(cuid())
+  id          String                 @id @default(cuid())
   name        String
   description String?
-  slug        String    @unique
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  slug        String                 @unique
+  createdAt   DateTime               @default(now())
+  updatedAt   DateTime               @updatedAt
   chatbots    Chatbot[]
-  users       User[]
+  users       User[]                 @relation("OrganizationMembers")
+  documents   OrganizationDocument[]
 
   @@index([slug])
+}
+
+model OrganizationDocument {
+  id             String                   @id @default(cuid())
+  title          String
+  content        String
+  type           OrganizationDocumentType @default(TEXT)
+  metadata       Json?
+  vectorId       String?                  @unique // Reference to vector in external vector DB
+  organizationId String
+  uploadedBy     String
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  organization   Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  uploader       User                     @relation(fields: [uploadedBy], references: [id])
+
+  @@index([organizationId])
+  @@index([type])
+  @@index([vectorId])
+  @@index([uploadedBy])
 }
 
 model Chatbot {
@@ -162,4 +183,14 @@ enum ContextBlockType {
   FAQ
   TROUBLESHOOTING
   TUTORIAL
+}
+
+enum OrganizationDocumentType {
+  TEXT
+  POLICY
+  PROCEDURE
+  MANUAL
+  GUIDE
+  FAQ
+  ANNOUNCEMENT
 }

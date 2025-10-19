@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/shadcn/ui/button";
 import {
   Card,
@@ -10,10 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/shadcn/ui/card";
-import { Input } from "@/components/shadcn/ui/input";
-import { Label } from "@/components/shadcn/ui/label";
-import { Textarea } from "@/components/shadcn/ui/textarea";
-import { Building2, Plus, Users, Bot, Calendar } from "lucide-react";
+import { Building2, Plus, Users, Bot, Calendar, Edit } from "lucide-react";
 import { toast } from "react-toastify";
 
 interface Organization {
@@ -27,15 +24,9 @@ interface Organization {
 }
 
 export default function OrganizationsPage() {
-  const { data: session } = useSession();
+  const router = useRouter();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    slug: "",
-  });
 
   // Load organizations
   useEffect(() => {
@@ -56,55 +47,6 @@ export default function OrganizationsPage() {
 
     fetchOrganizations();
   }, []);
-
-  // Generate slug from name
-  const generateSlug = (name: string) => {
-    return name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/(^-|-$)/g, "");
-  };
-
-  const handleNameChange = (name: string) => {
-    setFormData({
-      ...formData,
-      name,
-      slug: generateSlug(name),
-    });
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!formData.name.trim()) {
-      toast.error("Organization name is required");
-      return;
-    }
-
-    try {
-      const response = await fetch("/api/organizations", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(formData),
-      });
-
-      if (response.ok) {
-        const newOrg = await response.json();
-        setOrganizations([...organizations, newOrg]);
-        setFormData({ name: "", description: "", slug: "" });
-        setShowCreateForm(false);
-        toast.success("Organization created successfully!");
-      } else {
-        const error = await response.json();
-        toast.error(error.message || "Failed to create organization");
-      }
-    } catch (error) {
-      console.error("Failed to create organization:", error);
-      toast.error("Failed to create organization");
-    }
-  };
 
   if (loading) {
     return (
@@ -146,73 +88,11 @@ export default function OrganizationsPage() {
             Manage your organizations and access permissions
           </p>
         </div>
-        <Button onClick={() => setShowCreateForm(true)}>
+        <Button onClick={() => router.push("/app/organizations/create")}>
           <Plus className="mr-2 h-4 w-4" />
           Create Organization
         </Button>
       </div>
-
-      {showCreateForm && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Create New Organization</CardTitle>
-            <CardDescription>
-              Create a new organization to manage your chatbots and team members
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Organization Name</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="Enter organization name"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="slug">URL Slug</Label>
-                <Input
-                  id="slug"
-                  value={formData.slug}
-                  onChange={(e) =>
-                    setFormData({ ...formData, slug: e.target.value })
-                  }
-                  placeholder="organization-slug"
-                  required
-                />
-                <p className="text-sm text-muted-foreground">
-                  This will be used in URLs and must be unique
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description (Optional)</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  placeholder="Describe your organization"
-                  rows={3}
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button type="submit">Create Organization</Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setShowCreateForm(false)}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      )}
 
       {organizations.length === 0 ? (
         <Card>
@@ -223,7 +103,7 @@ export default function OrganizationsPage() {
               Create your first organization to start managing chatbots and team
               members
             </p>
-            <Button onClick={() => setShowCreateForm(true)}>
+            <Button onClick={() => router.push("/app/organizations/create")}>
               <Plus className="mr-2 h-4 w-4" />
               Create Organization
             </Button>
@@ -266,8 +146,16 @@ export default function OrganizationsPage() {
                   </div>
                 </div>
                 <div className="mt-4 pt-4 border-t">
-                  <Button variant="outline" size="sm" className="w-full">
-                    Manage Organization
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() =>
+                      router.push(`/app/organizations/${org.id}/edit`)
+                    }
+                  >
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit Organization
                   </Button>
                 </div>
               </CardContent>
