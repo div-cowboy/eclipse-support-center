@@ -2,21 +2,12 @@
 
 import { ChatbotChatInterface } from "@/components/chat/ChatbotChatInterface";
 
-import { use } from "react";
-
 interface ChatPageProps {
-  params: {
-    id: string;
-  };
+  params: Promise<{ id: string }>;
 }
 
-export default function ChatPage({ params }: ChatPageProps) {
-  // const router = useRouter();
-  const { id } = use(Promise.resolve(params));
-
-  if (!id) {
-    return <div>No ID</div>;
-  }
+export default async function ChatPage({ params }: ChatPageProps) {
+  const { id } = await params;
 
   return (
     <div className="space-y-6">
