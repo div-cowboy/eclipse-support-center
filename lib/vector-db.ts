@@ -10,6 +10,7 @@ export interface VectorEmbedding {
     type: string;
     chatbotId: string;
     contextBlockId: string;
+    organizationId?: string;
   };
 }
 
@@ -149,19 +150,17 @@ export class EmbeddingService {
     if (process.env.OPENAI_API_KEY) {
       try {
         // For OpenAI - you would need to install openai package
-        // const { OpenAI } = await import("openai");
-        // const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-        // const response = await openai.embeddings.create({
-        //   model: "text-embedding-ada-002",
-        //   input: text,
-        // });
-        // return response.data[0].embedding;
-
-        console.warn(
-          "OpenAI package not installed. Install 'openai' to use real embeddings."
-        );
+        const openaiModule = await import("openai");
+        const OpenAI = openaiModule.default || openaiModule.OpenAI;
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const response = await openai.embeddings.create({
+          model: "text-embedding-3-small",
+          input: text,
+        });
+        return response.data[0].embedding;
       } catch (error) {
         console.error("Error generating OpenAI embedding:", error);
+        // Fall through to mock embedding
       }
     }
 
@@ -252,6 +251,80 @@ export class ContextBlockVectorService {
 
     return this.vectorDB.search(queryEmbedding, topK, {
       chatbotId,
+    });
+  }
+}
+
+// Organization description vector operations
+export class OrganizationDescriptionVectorService {
+  constructor(private vectorDB: VectorDatabase) {}
+
+  async createOrganizationDescriptionEmbedding(
+    organizationId: string,
+    name: string,
+    description: string
+  ): Promise<string> {
+    const text = `${name}\n\n${description}`;
+    const embedding = await EmbeddingService.generateEmbedding(text);
+
+    const vectorId = `org_desc_${organizationId}`;
+    const vectorEmbedding: VectorEmbedding = {
+      id: vectorId,
+      vector: embedding,
+      metadata: {
+        title: `${name} - Organization Description`,
+        content: description,
+        type: "organization_description",
+        chatbotId: "", // Not applicable for org descriptions
+        contextBlockId: organizationId,
+        organizationId: organizationId,
+      },
+    };
+
+    await this.vectorDB.upsert([vectorEmbedding]);
+    return vectorId;
+  }
+
+  async updateOrganizationDescriptionEmbedding(
+    vectorId: string,
+    organizationId: string,
+    name: string,
+    description: string
+  ): Promise<void> {
+    const text = `${name}\n\n${description}`;
+    const embedding = await EmbeddingService.generateEmbedding(text);
+
+    const vectorEmbedding: VectorEmbedding = {
+      id: vectorId,
+      vector: embedding,
+      metadata: {
+        title: `${name} - Organization Description`,
+        content: description,
+        type: "organization_description",
+        chatbotId: "", // Not applicable for org descriptions
+        contextBlockId: organizationId,
+        organizationId: organizationId,
+      },
+    };
+
+    await this.vectorDB.update(vectorId, vectorEmbedding);
+  }
+
+  async deleteOrganizationDescriptionEmbedding(
+    vectorId: string
+  ): Promise<void> {
+    await this.vectorDB.delete([vectorId]);
+  }
+
+  async searchOrganizationDescriptions(
+    query: string,
+    organizationId: string,
+    topK: number = 5
+  ): Promise<VectorSearchResult[]> {
+    const queryEmbedding = await EmbeddingService.generateEmbedding(query);
+
+    return this.vectorDB.search(queryEmbedding, topK, {
+      organizationId,
     });
   }
 }

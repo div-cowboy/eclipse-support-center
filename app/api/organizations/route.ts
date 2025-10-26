@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
-import { Organization } from "@prisma/client";
+// import { Organization } from "@prisma/client";
 
 // GET /api/organizations - Get all organizations for the current user
 export async function GET() {
@@ -122,6 +122,12 @@ export async function POST(request: NextRequest) {
     });
 
     // Create documents if provided
+    let createdDocuments: Array<{
+      id: string;
+      title: string;
+      content: string;
+      type: string;
+    }> = [];
     if (documents && Array.isArray(documents) && documents.length > 0) {
       try {
         const documentPromises = documents.map(
@@ -136,8 +142,18 @@ export async function POST(request: NextRequest) {
                 data: {
                   title: doc.title,
                   content: doc.content,
-                  type: doc.type || "TEXT",
-                  metadata: doc.metadata || null,
+                  type:
+                    (doc.type as
+                      | "TEXT"
+                      | "POLICY"
+                      | "PROCEDURE"
+                      | "MANUAL"
+                      | "GUIDE"
+                      | "FAQ"
+                      | "ANNOUNCEMENT") || "TEXT",
+                  metadata: doc.metadata
+                    ? JSON.stringify(doc.metadata)
+                    : undefined,
                   organizationId: organization.id,
                   uploadedBy: user.id,
                 },
@@ -147,9 +163,14 @@ export async function POST(request: NextRequest) {
           }
         );
 
-        const createdDocuments = await Promise.all(
+        createdDocuments = (await Promise.all(
           documentPromises.filter(Boolean)
-        );
+        )) as Array<{
+          id: string;
+          title: string;
+          content: string;
+          type: string;
+        }>;
 
         console.log(
           `Created ${createdDocuments.length} documents for organization ${organization.id}`
@@ -160,24 +181,87 @@ export async function POST(request: NextRequest) {
         // The organization is already created, so we'll log the error but continue
       }
 
-      // TODO: Generate and store vector embeddings for created documents
-      // This would integrate with your vector database
-      // const vectorService = new OrganizationDocumentVectorService(vectorDB);
-      // for (const doc of createdDocuments) {
-      //   if (doc) {
-      //     const vectorId = await vectorService.createOrganizationDocumentEmbedding(
-      //       doc.id,
-      //       doc.title,
-      //       doc.content,
-      //       doc.type,
-      //       organization.id
-      //     );
-      //     await prisma.organizationDocument.update({
-      //       where: { id: doc.id },
-      //       data: { vectorId },
-      //     });
-      //   }
-      // }
+      // Generate and store vector embeddings for created documents
+      if (createdDocuments.length > 0) {
+        try {
+          const { initializeVectorDatabase } = await import(
+            "@/lib/vector-config"
+          );
+          const { OrganizationDocumentVectorService } = await import(
+            "@/lib/vector-db"
+          );
+
+          const vectorDB = await initializeVectorDatabase();
+          if (vectorDB) {
+            const vectorService = new OrganizationDocumentVectorService(
+              vectorDB
+            );
+            for (const doc of createdDocuments) {
+              if (doc) {
+                const vectorId =
+                  await vectorService.createOrganizationDocumentEmbedding(
+                    doc.id,
+                    doc.title,
+                    doc.content,
+                    doc.type,
+                    organization.id
+                  );
+                await prisma.organizationDocument.update({
+                  where: { id: doc.id },
+                  data: { vectorId },
+                });
+              }
+            }
+            console.log(
+              `Generated vector embeddings for ${createdDocuments.length} documents`
+            );
+          } else {
+            console.warn(
+              "Vector database not available - documents stored without embeddings"
+            );
+          }
+        } catch (vectorError) {
+          console.error("Error generating vector embeddings:", vectorError);
+          // Don't fail the organization creation if vector storage fails
+        }
+      }
+    }
+
+    // Index organization description in vector database
+    if (organization.description) {
+      try {
+        const { initializeVectorDatabase } = await import(
+          "@/lib/vector-config"
+        );
+        const { OrganizationDescriptionVectorService } = await import(
+          "@/lib/vector-db"
+        );
+
+        const vectorDB = await initializeVectorDatabase();
+        if (vectorDB) {
+          const vectorService = new OrganizationDescriptionVectorService(
+            vectorDB
+          );
+          await vectorService.createOrganizationDescriptionEmbedding(
+            organization.id,
+            organization.name,
+            organization.description
+          );
+          console.log(
+            `Generated vector embedding for organization description: ${organization.id}`
+          );
+        } else {
+          console.warn(
+            "Vector database not available - organization description not indexed"
+          );
+        }
+      } catch (vectorError) {
+        console.error(
+          "Error generating organization description embedding:",
+          vectorError
+        );
+        // Don't fail the organization creation if vector storage fails
+      }
     }
 
     return NextResponse.json(organization, { status: 201 });

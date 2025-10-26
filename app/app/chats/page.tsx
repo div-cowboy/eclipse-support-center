@@ -2,23 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/shadcn/ui/table";
 import { Button } from "@/components/shadcn/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/shadcn/ui/card";
-import { Bot, Plus, Edit, Trash2, MessageSquare } from "lucide-react";
+import { Bot, Plus } from "lucide-react";
+import { ChatbotChatsAccordion } from "@/components/chat/ChatbotChatsAccordion";
 
 // Chatbot type based on Prisma schema
 interface Chatbot {
@@ -35,48 +21,6 @@ interface Chatbot {
   };
 }
 
-// Mock data for chatbots - replace with actual data fetching
-const mockChatbots: Chatbot[] = [
-  {
-    id: "1",
-    name: "Eclipse IDE Support Bot",
-    description:
-      "Helps with Eclipse IDE setup, configuration, and troubleshooting",
-    status: "ACTIVE",
-    createdAt: new Date("2024-01-15"),
-    updatedAt: new Date("2024-01-15"),
-    _count: {
-      chats: 12,
-      contextBlocks: 25,
-    },
-  },
-  {
-    id: "2",
-    name: "Java Development Assistant",
-    description: "Assists with Java compilation, debugging, and best practices",
-    status: "ACTIVE",
-    createdAt: new Date("2024-01-14"),
-    updatedAt: new Date("2024-01-14"),
-    _count: {
-      chats: 8,
-      contextBlocks: 18,
-    },
-  },
-  {
-    id: "3",
-    name: "Plugin Installation Helper",
-    description:
-      "Guides users through Eclipse plugin installation and management",
-    status: "ARCHIVED",
-    createdAt: new Date("2024-01-10"),
-    updatedAt: new Date("2024-01-12"),
-    _count: {
-      chats: 5,
-      contextBlocks: 12,
-    },
-  },
-];
-
 function EmptyState() {
   const router = useRouter();
 
@@ -87,8 +31,8 @@ function EmptyState() {
       </div>
       <h3 className="text-lg font-semibold mb-2">No chatbots yet</h3>
       <p className="text-muted-foreground text-center mb-6 max-w-sm">
-        Create your first chatbot to provide intelligent support for Eclipse
-        development issues. Add context blocks to build a knowledge base.
+        Create your first chatbot to start having conversations and building a
+        knowledge base.
       </p>
       <Button onClick={() => router.push("/app/chatbots/new")}>
         <Plus className="h-4 w-4 mr-2" />
@@ -98,145 +42,43 @@ function EmptyState() {
   );
 }
 
-function ChatbotsTable({ chatbots }: { chatbots: Chatbot[] }) {
-  const router = useRouter();
-
-  const formatDate = (date: Date) => {
-    return new Intl.DateTimeFormat("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(date);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "ACTIVE":
-        return "bg-green-100 text-green-800";
-      case "INACTIVE":
-        return "bg-yellow-100 text-yellow-800";
-      case "ARCHIVED":
-        return "bg-gray-100 text-gray-800";
-      default:
-        return "bg-gray-100 text-gray-800";
-    }
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Your Chatbots</CardTitle>
-        <CardDescription>
-          Manage your AI chatbots and their knowledge bases for Eclipse support.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="overflow-hidden rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Chats</TableHead>
-                <TableHead>Context Blocks</TableHead>
-                <TableHead>Last Updated</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {chatbots.map((chatbot) => (
-                <TableRow key={chatbot.id}>
-                  <TableCell className="font-medium">
-                    <button
-                      onClick={() => router.push(`/app/chatbots/${chatbot.id}`)}
-                      className="flex items-center hover:text-primary transition-colors"
-                    >
-                      <Bot className="h-4 w-4 mr-2 text-muted-foreground" />
-                      {chatbot.name}
-                    </button>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {chatbot.description || "No description"}
-                  </TableCell>
-                  <TableCell>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(
-                        chatbot.status
-                      )}`}
-                    >
-                      {chatbot.status}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <MessageSquare className="h-4 w-4 mr-1 text-muted-foreground" />
-                      {chatbot._count.chats}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center">
-                      <Bot className="h-4 w-4 mr-1 text-muted-foreground" />
-                      {chatbot._count.contextBlocks}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {formatDate(chatbot.updatedAt)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex space-x-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          router.push(`/app/chatbots/${chatbot.id}`)
-                        }
-                      >
-                        View
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm">
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-export default function ChatbotsPage() {
+export default function ChatsPage() {
   const router = useRouter();
   const [chatbots, setChatbots] = useState<Chatbot[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate loading - replace with actual API call
-    const timer = setTimeout(() => {
-      setChatbots(mockChatbots);
-      setLoading(false);
-    }, 1000);
+    const fetchChatbots = async () => {
+      try {
+        const response = await fetch("/api/chatbots");
+        if (response.ok) {
+          const data = await response.json();
+          setChatbots(data);
+        } else {
+          console.error("Failed to fetch chatbots");
+        }
+      } catch (error) {
+        console.error("Error fetching chatbots:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    return () => clearTimeout(timer);
+    fetchChatbots();
   }, []);
+
+  const handleStartChat = (chatbotId: string) => {
+    window.open(`/app/chatbots/${chatbotId}/chat`, "_blank");
+  };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Chatbots</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Chats</h1>
           <p className="text-muted-foreground">
-            Manage your AI chatbots and their knowledge bases for Eclipse
-            support.
+            Access your chatbots and their recent conversations. Click to expand
+            and view recent chats.
           </p>
         </div>
         <Button onClick={() => router.push("/app/chatbots/new")}>
@@ -252,7 +94,10 @@ export default function ChatbotsPage() {
       ) : chatbots.length === 0 ? (
         <EmptyState />
       ) : (
-        <ChatbotsTable chatbots={chatbots} />
+        <ChatbotChatsAccordion
+          chatbots={chatbots}
+          onStartChat={handleStartChat}
+        />
       )}
     </div>
   );

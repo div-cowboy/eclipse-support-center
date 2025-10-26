@@ -33,7 +33,15 @@ interface ChatbotFormProps {
     name: string;
     description?: string;
     status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
-    config?: any;
+    config?: {
+      systemPrompt?: string;
+      temperature?: number;
+      maxTokens?: number;
+      maxSources?: number;
+      includeOrganizationDocs?: boolean;
+      includeContextBlocks?: boolean;
+      coreRules?: Record<string, unknown>;
+    };
     organizationId: string;
   };
   organizations: Organization[];
@@ -42,7 +50,15 @@ interface ChatbotFormProps {
     description?: string;
     status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
     organizationId: string;
-    config?: any;
+    config?: {
+      systemPrompt?: string;
+      temperature?: number;
+      maxTokens?: number;
+      maxSources?: number;
+      includeOrganizationDocs?: boolean;
+      includeContextBlocks?: boolean;
+      coreRules?: Record<string, unknown>;
+    };
   }) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;
@@ -60,6 +76,7 @@ export function ChatbotForm({
     description: chatbot?.description || "",
     status: chatbot?.status || ("ACTIVE" as const),
     organizationId: chatbot?.organizationId || "",
+    systemPrompt: chatbot?.config?.systemPrompt || "",
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -71,6 +88,10 @@ export function ChatbotForm({
       description: formData.description.trim() || undefined,
       status: formData.status,
       organizationId: formData.organizationId,
+      config: {
+        ...chatbot?.config,
+        systemPrompt: formData.systemPrompt.trim() || undefined,
+      },
     });
   };
 
@@ -134,6 +155,27 @@ export function ChatbotForm({
               placeholder="Describe what this chatbot helps with..."
               rows={3}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="systemPrompt">System Prompt</Label>
+            <Textarea
+              id="systemPrompt"
+              value={formData.systemPrompt}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  systemPrompt: e.target.value,
+                }))
+              }
+              placeholder="Define how the chatbot should behave and respond..."
+              rows={4}
+            />
+            <p className="text-xs text-muted-foreground">
+              This prompt defines the chatbot&apos;s personality and behavior.
+              It will be combined with core conversation rules and knowledge
+              base context.
+            </p>
           </div>
 
           <div className="space-y-2">

@@ -18,6 +18,7 @@ import {
   Bot,
   MessageSquare,
   FileText,
+  MessageCircle,
 } from "lucide-react";
 import { ContextBlockList } from "@/components/chatbots/ContextBlockList";
 import { ContextBlockForm } from "@/components/chatbots/ContextBlockForm";
@@ -249,7 +250,19 @@ export default function ChatbotDetailPage() {
           </div>
         </div>
         <div className="flex space-x-2">
-          <Button variant="outline">
+          <Button
+            onClick={() =>
+              window.open(`/app/chatbots/${params.id}/chat`, "_blank")
+            }
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <MessageCircle className="h-4 w-4 mr-2" />
+            Start Chat
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => router.push(`/app/chatbots/${params.id}/edit`)}
+          >
             <Edit className="h-4 w-4 mr-2" />
             Edit Chatbot
           </Button>

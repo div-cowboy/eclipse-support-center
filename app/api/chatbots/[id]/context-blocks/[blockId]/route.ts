@@ -14,18 +14,21 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
+
+    // Get user organization IDs
+    const userOrganizationIds = user.organizations.map((org) => org.id);
 
     // Get the specific context block
     const contextBlock = await prisma.contextBlock.findFirst({
@@ -33,7 +36,7 @@ export async function GET(
         id: params.blockId,
         chatbot: {
           id: params.id,
-          organizationId: user.organizationId,
+          organizationId: { in: userOrganizationIds },
         },
       },
     });
@@ -70,15 +73,15 @@ export async function PUT(
     const body = await request.json();
     const { title, content, type, metadata } = body;
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
@@ -89,7 +92,7 @@ export async function PUT(
         id: params.blockId,
         chatbot: {
           id: params.id,
-          organizationId: user.organizationId,
+          organizationId: { in: userOrganizationIds },
         },
       },
     });
@@ -139,15 +142,15 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
@@ -158,7 +161,7 @@ export async function DELETE(
         id: params.blockId,
         chatbot: {
           id: params.id,
-          organizationId: user.organizationId,
+          organizationId: { in: userOrganizationIds },
         },
       },
     });

@@ -15,21 +15,22 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
 
     // Verify organization belongs to user
-    if (user.organizationId !== params.id) {
+    const userOrganizationIds = user.organizations.map((org) => org.id);
+    if (!userOrganizationIds.includes(params.id)) {
       return NextResponse.json(
         { error: "Organization not found" },
         { status: 404 }
@@ -88,21 +89,22 @@ export async function PUT(
       );
     }
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
 
     // Verify organization belongs to user
-    if (user.organizationId !== params.id) {
+    const userOrganizationIds = user.organizations.map((org) => org.id);
+    if (!userOrganizationIds.includes(params.id)) {
       return NextResponse.json(
         { error: "Organization not found" },
         { status: 404 }
@@ -190,21 +192,22 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
 
     // Verify organization belongs to user
-    if (user.organizationId !== params.id) {
+    const userOrganizationIds = user.organizations.map((org) => org.id);
+    if (!userOrganizationIds.includes(params.id)) {
       return NextResponse.json(
         { error: "Organization not found" },
         { status: 404 }

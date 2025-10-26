@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 // GET /api/chatbots/[id] - Get a specific chatbot
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -14,24 +14,29 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user and their organization
+    const resolvedParams = await params;
+
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
 
+    // Get user organization IDs
+    const userOrganizationIds = user.organizations.map((org) => org.id);
+
     // Get the specific chatbot
     const chatbot = await prisma.chatbot.findFirst({
       where: {
-        id: params.id,
-        organizationId: user.organizationId,
+        id: resolvedParams.id,
+        organizationId: { in: userOrganizationIds },
       },
       include: {
         contextBlocks: {
@@ -63,7 +68,7 @@ export async function GET(
 // PUT /api/chatbots/[id] - Update a chatbot
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -72,27 +77,31 @@ export async function PUT(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const resolvedParams = await params;
     const body = await request.json();
     const { name, description, status, config } = body;
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
 
+    // Get user organization IDs
+    const userOrganizationIds = user.organizations.map((org) => org.id);
+
     // Check if chatbot exists and belongs to user's organization
     const existingChatbot = await prisma.chatbot.findFirst({
       where: {
-        id: params.id,
-        organizationId: user.organizationId,
+        id: resolvedParams.id,
+        organizationId: { in: userOrganizationIds },
       },
     });
 
@@ -102,7 +111,7 @@ export async function PUT(
 
     // Update chatbot
     const chatbot = await prisma.chatbot.update({
-      where: { id: params.id },
+      where: { id: resolvedParams.id },
       data: {
         ...(name && { name }),
         ...(description !== undefined && { description }),
@@ -132,7 +141,7 @@ export async function PUT(
 // DELETE /api/chatbots/[id] - Delete a chatbot
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -141,15 +150,15 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
@@ -158,7 +167,7 @@ export async function DELETE(
     const existingChatbot = await prisma.chatbot.findFirst({
       where: {
         id: params.id,
-        organizationId: user.organizationId,
+        organizationId: { in: userOrganizationIds },
       },
     });
 

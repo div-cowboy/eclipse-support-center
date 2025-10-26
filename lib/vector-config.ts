@@ -13,6 +13,9 @@ const PINECONE_ENVIRONMENT =
 // OpenAI configuration for embeddings
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
+// Groq configuration for text generation
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
 export interface VectorDBConfig {
   type: "pinecone" | "chroma";
   pinecone?: {
@@ -21,6 +24,10 @@ export interface VectorDBConfig {
     environment: string;
   };
   openai?: {
+    apiKey: string;
+    model?: string;
+  };
+  groq?: {
     apiKey: string;
     model?: string;
   };
@@ -41,19 +48,13 @@ export async function initializeVectorDatabase(): Promise<VectorDatabase | null>
       return null;
     }
 
-    // Initialize Pinecone (you'll need to install @pinecone-database/pinecone)
-    // const { Pinecone } = await import("@pinecone-database/pinecone");
-    // const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
-    // const index = pinecone.index(PINECONE_INDEX_NAME);
+    // Initialize Pinecone
+    const { Pinecone } = await import("@pinecone-database/pinecone");
+    const pinecone = new Pinecone({ apiKey: PINECONE_API_KEY });
+    const index = pinecone.index(PINECONE_INDEX_NAME);
 
-    // For now, return null since Pinecone isn't installed
-    console.warn(
-      "Pinecone not installed. Install @pinecone-database/pinecone to enable vector storage."
-    );
-    return null;
-
-    // Uncomment when Pinecone is installed:
-    // return new PineconeVectorDB(index);
+    console.log("Pinecone initialized successfully");
+    return new PineconeVectorDB(index);
   } catch (error) {
     console.error("Failed to initialize vector database:", error);
     return null;
@@ -91,7 +92,11 @@ export function getVectorDBConfig(): VectorDBConfig {
     },
     openai: {
       apiKey: OPENAI_API_KEY || "",
-      model: "text-embedding-ada-002",
+      model: "text-embedding-3-small",
+    },
+    groq: {
+      apiKey: GROQ_API_KEY || "",
+      model: "llama-3.1-8b-instant",
     },
   };
 }
@@ -112,4 +117,5 @@ export const ENVIRONMENT_VARIABLES = {
     "Name of the Pinecone index to use (default: eclipse-support-center)",
   PINECONE_ENVIRONMENT: "Pinecone environment/region (default: us-east-1-aws)",
   OPENAI_API_KEY: "Your OpenAI API key for generating embeddings",
+  GROQ_API_KEY: "Your Groq API key for text generation",
 } as const;

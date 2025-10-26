@@ -15,21 +15,22 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
 
     // Verify organization belongs to user
-    if (user.organizationId !== params.id) {
+    const userOrganizationIds = user.organizations.map((org) => org.id);
+    if (!userOrganizationIds.includes(params.id)) {
       return NextResponse.json(
         { error: "Organization not found" },
         { status: 404 }
@@ -79,21 +80,22 @@ export async function POST(
       );
     }
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
 
     // Verify organization belongs to user
-    if (user.organizationId !== params.id) {
+    const userOrganizationIds = user.organizations.map((org) => org.id);
+    if (!userOrganizationIds.includes(params.id)) {
       return NextResponse.json(
         { error: "Organization not found" },
         { status: 404 }
@@ -117,23 +119,43 @@ export async function POST(
       },
     });
 
-    // TODO: Generate and store vector embeddings
-    // This would integrate with your vector database
-    // For now, we'll leave this as a placeholder
-    // const vectorService = new OrganizationDocumentVectorService(vectorDB);
-    // const vectorId = await vectorService.createOrganizationDocumentEmbedding(
-    //   document.id,
-    //   title,
-    //   content,
-    //   type || "TEXT",
-    //   params.id
-    // );
-    //
-    // // Update document with vector ID
-    // await prisma.organizationDocument.update({
-    //   where: { id: document.id },
-    //   data: { vectorId },
-    // });
+    // Generate and store vector embeddings
+    try {
+      const { initializeVectorDatabase } = await import("@/lib/vector-config");
+      const { OrganizationDocumentVectorService } = await import(
+        "@/lib/vector-db"
+      );
+
+      const vectorDB = await initializeVectorDatabase();
+      if (vectorDB) {
+        const vectorService = new OrganizationDocumentVectorService(vectorDB);
+        const vectorId =
+          await vectorService.createOrganizationDocumentEmbedding(
+            document.id,
+            title,
+            content,
+            type || "TEXT",
+            params.id
+          );
+
+        // Update document with vector ID
+        await prisma.organizationDocument.update({
+          where: { id: document.id },
+          data: { vectorId },
+        });
+
+        console.log(
+          `Generated vector embedding for document ${document.id}: ${vectorId}`
+        );
+      } else {
+        console.warn(
+          "Vector database not available - document stored without embeddings"
+        );
+      }
+    } catch (vectorError) {
+      console.error("Error generating vector embeddings:", vectorError);
+      // Don't fail the document creation if vector storage fails
+    }
 
     return NextResponse.json(document, { status: 201 });
   } catch (error) {

@@ -163,6 +163,14 @@ export async function PUT(
     });
 
     // Handle documents if provided
+    let createdDocuments: Array<{
+      id: string;
+      title: string;
+      content: string;
+      type: string;
+      vectorId?: string;
+    }> = [];
+
     if (documents && Array.isArray(documents) && documents.length > 0) {
       try {
         // Delete existing documents for this organization
@@ -204,9 +212,15 @@ export async function PUT(
           }
         );
 
-        const createdDocuments = await Promise.all(
+        createdDocuments = (await Promise.all(
           documentPromises.filter(Boolean)
-        );
+        )) as Array<{
+          id: string;
+          title: string;
+          content: string;
+          type: string;
+          vectorId?: string;
+        }>;
 
         console.log(
           `Updated ${createdDocuments.length} documents for organization ${params.id}`
@@ -216,8 +230,101 @@ export async function PUT(
         // Don't fail the entire organization update if documents fail
       }
 
-      // TODO: Update vector embeddings for updated documents
-      // This would integrate with your vector database
+      // Update vector embeddings for updated documents
+      if (createdDocuments.length > 0) {
+        try {
+          const { initializeVectorDatabase } = await import(
+            "@/lib/vector-config"
+          );
+          const { OrganizationDocumentVectorService } = await import(
+            "@/lib/vector-db"
+          );
+
+          const vectorDB = await initializeVectorDatabase();
+          if (vectorDB) {
+            const vectorService = new OrganizationDocumentVectorService(
+              vectorDB
+            );
+            for (const doc of createdDocuments) {
+              if (doc) {
+                // Delete old vector if it exists
+                if (doc.vectorId) {
+                  await vectorService.deleteOrganizationDocumentEmbedding(
+                    doc.vectorId
+                  );
+                }
+
+                // Create new vector embedding
+                const vectorId =
+                  await vectorService.createOrganizationDocumentEmbedding(
+                    doc.id,
+                    doc.title,
+                    doc.content,
+                    doc.type,
+                    params.id
+                  );
+                await prisma.organizationDocument.update({
+                  where: { id: doc.id },
+                  data: { vectorId },
+                });
+              }
+            }
+            console.log(
+              `Updated vector embeddings for ${createdDocuments.length} documents`
+            );
+          } else {
+            console.warn(
+              "Vector database not available - documents updated without embeddings"
+            );
+          }
+        } catch (vectorError) {
+          console.error("Error updating vector embeddings:", vectorError);
+          // Don't fail the organization update if vector storage fails
+        }
+      }
+    }
+
+    // Update organization description vector embedding
+    if (organization.description) {
+      try {
+        const { initializeVectorDatabase } = await import(
+          "@/lib/vector-config"
+        );
+        const { OrganizationDescriptionVectorService } = await import(
+          "@/lib/vector-db"
+        );
+
+        const vectorDB = await initializeVectorDatabase();
+        if (vectorDB) {
+          const vectorService = new OrganizationDescriptionVectorService(
+            vectorDB
+          );
+
+          // Check if there's an existing vector for this organization description
+          const existingVectorId = `org_desc_${params.id}`;
+
+          // Update the vector embedding
+          await vectorService.updateOrganizationDescriptionEmbedding(
+            existingVectorId,
+            params.id,
+            organization.name,
+            organization.description
+          );
+          console.log(
+            `Updated vector embedding for organization description: ${params.id}`
+          );
+        } else {
+          console.warn(
+            "Vector database not available - organization description not updated"
+          );
+        }
+      } catch (vectorError) {
+        console.error(
+          "Error updating organization description embedding:",
+          vectorError
+        );
+        // Don't fail the organization update if vector storage fails
+      }
     }
 
     return NextResponse.json(organization);

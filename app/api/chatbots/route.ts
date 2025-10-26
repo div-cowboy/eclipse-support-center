@@ -11,22 +11,25 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
 
-    // Get all chatbots for the organization
+    // Get organization IDs for the user
+    const organizationIds = user.organizations.map((org) => org.id);
+
+    // Get all chatbots for the user's organizations
     const chatbots = await prisma.chatbot.findMany({
-      where: { organizationId: user.organizationId },
+      where: { organizationId: { in: organizationIds } },
       include: {
         _count: {
           select: {
@@ -71,23 +74,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get user and their organization
+    // Get user and their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
-      include: { organization: true },
+      include: { organizations: true },
     });
 
-    if (!user || !user.organizationId) {
+    if (!user || !user.organizations || user.organizations.length === 0) {
       return NextResponse.json(
-        { error: "User not found or no organization" },
+        { error: "User not found or no organizations" },
         { status: 404 }
       );
     }
 
     // Verify that the user can create chatbots for the specified organization
-    if (user.organizationId !== organizationId) {
+    const userOrganizationIds = user.organizations.map((org) => org.id);
+    if (!userOrganizationIds.includes(organizationId)) {
       return NextResponse.json(
-        { error: "You can only create chatbots for your organization" },
+        { error: "You can only create chatbots for your organizations" },
         { status: 403 }
       );
     }
