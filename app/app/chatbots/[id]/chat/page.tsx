@@ -2,11 +2,11 @@
 
 import { ChatbotChatInterface } from "@/components/chat/ChatbotChatInterface";
 
-interface ChatPageProps {
+export default async function ChatPage({
+  params,
+}: {
   params: Promise<{ id: string }>;
-}
-
-export default async function ChatPage({ params }: ChatPageProps) {
+}) {
   const { id } = await params;
 
   return (
@@ -21,7 +21,7 @@ export default async function ChatPage({ params }: ChatPageProps) {
         </div>
       </div>
 
-      <ChatbotChatInterface chatbotId={id.toString()} />
+      <ChatbotChatInterface chatbotId={id} />
     </div>
   );
 }

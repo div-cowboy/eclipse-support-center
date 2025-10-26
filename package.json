@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "dotenv -e .env -- next dev --turbopack",
-    "build": "prisma generate && dotenv -e .env -- next build --turbopack",
-    "start": "dotenv -e .env -- next start",
+    "build": "prisma generate --no-engine && next build",
+    "start": "next start",
     "lint": "eslint",
     "db:generate": "dotenv -e .env -- prisma generate",
     "db:push": "dotenv -e .env -- prisma db push",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/shadcn/ui/button";
 import { Badge } from "@/components/shadcn/ui/badge";
 import {
@@ -33,15 +33,17 @@ interface TraditionalChat {
   };
 }
 
-export default function ChatDetailPage({ params }: { params: { id: string } }) {
+export default function ChatDetailPage() {
   const router = useRouter();
+  const params = useParams();
+  const chatId = params.id as string;
   const [chat, setChat] = useState<TraditionalChat | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchChat = async () => {
       try {
-        const response = await fetch(`/api/chats/${params.id}`);
+        const response = await fetch(`/api/chats/${chatId}`);
         if (response.ok) {
           const data = await response.json();
           setChat(data);
@@ -56,7 +58,7 @@ export default function ChatDetailPage({ params }: { params: { id: string } }) {
     };
 
     fetchChat();
-  }, [params.id]);
+  }, [chatId]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
