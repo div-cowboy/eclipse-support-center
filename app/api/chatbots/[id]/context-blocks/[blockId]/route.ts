@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 // GET /api/chatbots/[id]/context-blocks/[blockId] - Get a specific context block
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string; blockId: string } }
+  { params }: { params: Promise<{ id: string; blockId: string }> }
 ) {
+  const { id, blockId } = await params;
   try {
     const session = await auth();
 
@@ -33,9 +34,9 @@ export async function GET(
     // Get the specific context block
     const contextBlock = await prisma.contextBlock.findFirst({
       where: {
-        id: params.blockId,
+        id: blockId,
         chatbot: {
-          id: params.id,
+          id: id,
           organizationId: { in: userOrganizationIds },
         },
       },
@@ -61,9 +62,10 @@ export async function GET(
 // PUT /api/chatbots/[id]/context-blocks/[blockId] - Update a context block
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string; blockId: string } }
+  { params }: { params: Promise<{ id: string; blockId: string }> }
 ) {
   try {
+    const { id, blockId } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -86,12 +88,15 @@ export async function PUT(
       );
     }
 
+    // Get user organization IDs
+    const userOrganizationIds = user.organizations.map((org) => org.id);
+
     // Check if context block exists and belongs to user's organization
     const existingContextBlock = await prisma.contextBlock.findFirst({
       where: {
-        id: params.blockId,
+        id: blockId,
         chatbot: {
-          id: params.id,
+          id: id,
           organizationId: { in: userOrganizationIds },
         },
       },
@@ -106,7 +111,7 @@ export async function PUT(
 
     // Update context block
     const contextBlock = await prisma.contextBlock.update({
-      where: { id: params.blockId },
+      where: { id: blockId },
       data: {
         ...(title && { title }),
         ...(content && { content }),
@@ -133,9 +138,10 @@ export async function PUT(
 // DELETE /api/chatbots/[id]/context-blocks/[blockId] - Delete a context block
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string; blockId: string } }
+  { params }: { params: Promise<{ id: string; blockId: string }> }
 ) {
   try {
+    const { id, blockId } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -155,12 +161,15 @@ export async function DELETE(
       );
     }
 
+    // Get user organization IDs
+    const userOrganizationIds = user.organizations.map((org) => org.id);
+
     // Check if context block exists and belongs to user's organization
     const existingContextBlock = await prisma.contextBlock.findFirst({
       where: {
-        id: params.blockId,
+        id: blockId,
         chatbot: {
-          id: params.id,
+          id: id,
           organizationId: { in: userOrganizationIds },
         },
       },
@@ -180,7 +189,7 @@ export async function DELETE(
 
     // Delete context block
     await prisma.contextBlock.delete({
-      where: { id: params.blockId },
+      where: { id: blockId },
     });
 
     return NextResponse.json({ message: "Context block deleted successfully" });

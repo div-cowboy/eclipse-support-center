@@ -19,21 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/shadcn/ui/select";
+import { ContextBlock } from "@prisma/client";
 
 interface ContextBlockFormProps {
-  contextBlock?: {
-    id: string;
-    title: string;
-    content: string;
-    type:
-      | "TEXT"
-      | "CODE"
-      | "DOCUMENTATION"
-      | "FAQ"
-      | "TROUBLESHOOTING"
-      | "TUTORIAL";
-    metadata?: any;
-  };
+  contextBlock?: ContextBlock;
   onSubmit: (data: {
     title: string;
     content: string;
@@ -44,7 +33,7 @@ interface ContextBlockFormProps {
       | "FAQ"
       | "TROUBLESHOOTING"
       | "TUTORIAL";
-    metadata?: any;
+    metadata?: ContextBlock["metadata"];
   }) => Promise<void>;
   onCancel: () => void;
   loading?: boolean;

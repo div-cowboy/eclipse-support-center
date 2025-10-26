@@ -6,6 +6,7 @@ import {
   OrganizationDocumentVectorService,
   ContextBlockVectorService,
   OrganizationDescriptionVectorService,
+  VectorSearchResult,
 } from "./vector-db";
 import { VectorDatabase } from "./vector-db";
 import { initializeVectorDatabase } from "./vector-config";
@@ -197,7 +198,7 @@ export class EnhancedChatbotService {
               doc.document?.content || "",
               userMessage
             ),
-            type: doc.type,
+            type: doc.type as "organization" | "context",
           })),
           tokensUsed: grokResponse.usage?.totalTokens || 0,
         },
@@ -227,7 +228,7 @@ export class EnhancedChatbotService {
     conversationHistory: ChatMessage[] = [],
     config: Partial<ChatbotConfig> = {}
   ): AsyncGenerator<
-    { content: string; isComplete: boolean; sources?: any[] },
+    { content: string; isComplete: boolean; sources?: VectorSearchResult[] },
     void,
     unknown
   > {
@@ -315,18 +316,7 @@ export class EnhancedChatbotService {
         yield {
           content: chunk.content,
           isComplete: chunk.isComplete,
-          sources: chunk.isComplete
-            ? relevantDocs.map((doc) => ({
-                documentId: doc.document?.id || "",
-                title: doc.document?.title || "",
-                score: doc.score,
-                snippet: this.extractSnippet(
-                  doc.document?.content || "",
-                  userMessage
-                ),
-                type: doc.type,
-              }))
-            : undefined,
+          sources: chunk.isComplete ? relevantDocs : undefined,
         };
       }
     } catch (error) {
@@ -360,7 +350,7 @@ export class EnhancedChatbotService {
         type: string;
       };
       type: "organization_description" | "organization" | "context";
-      metadata: any;
+      metadata: VectorSearchResult["metadata"];
     }>
   > {
     const allResults: Array<{
@@ -373,7 +363,7 @@ export class EnhancedChatbotService {
         type: string;
       };
       type: "organization_description" | "organization" | "context";
-      metadata: any;
+      metadata: VectorSearchResult["metadata"];
     }> = [];
 
     try {
@@ -433,7 +423,7 @@ export class EnhancedChatbotService {
         type: string;
       };
       type: "organization_description";
-      metadata: any;
+      metadata: VectorSearchResult["metadata"];
     }>
   > {
     if (!this.organizationDescriptionVectorService) {
@@ -485,7 +475,7 @@ export class EnhancedChatbotService {
         type: string;
       };
       type: "organization";
-      metadata: any;
+      metadata: VectorSearchResult["metadata"];
     }>
   > {
     if (!this.organizationVectorService) {
@@ -558,7 +548,7 @@ export class EnhancedChatbotService {
         type: string;
       };
       type: "context";
-      metadata: any;
+      metadata: VectorSearchResult["metadata"];
     }>
   > {
     if (!this.contextBlockVectorService) {

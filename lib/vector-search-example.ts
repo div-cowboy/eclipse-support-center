@@ -4,8 +4,8 @@
 import {
   OrganizationDocumentVectorService,
   ContextBlockVectorService,
-  initializeVectorDatabase,
 } from "./vector-db";
+import { initializeVectorDatabase } from "./vector-config";
 import { processOrganizationDocument } from "./text-processing";
 
 /**
@@ -195,11 +195,3 @@ export async function completeWorkflowExample() {
     console.error("Error in complete workflow:", error);
   }
 }
-
-// Export functions for use in other parts of the application
-export {
-  searchOrganizationDocumentsExample,
-  searchContextBlocksExample,
-  processDocumentExample,
-  completeWorkflowExample,
-};

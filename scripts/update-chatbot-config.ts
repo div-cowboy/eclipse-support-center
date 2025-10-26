@@ -30,7 +30,7 @@ async function updateChatbotConfig() {
 
       // Update the chatbot config to ensure organization descriptions are included
       const updatedConfig = {
-        ...chatbot.config,
+        ...(chatbot.config as Record<string, unknown>),
         systemPrompt:
           "You are Eclipse Support Bot, specialized in IDE assistance. You help developers with Eclipse IDE issues, debugging, and best practices. Always provide step-by-step solutions and use Eclipse-specific terminology when relevant.",
         includeOrganizationDocs: true,

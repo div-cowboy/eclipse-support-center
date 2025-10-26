@@ -5,10 +5,12 @@ import { prisma } from "@/lib/prisma";
 // GET /api/chatbots/[id]/context-blocks - Get all context blocks for a chatbot
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
+
+    const { id } = await params;
 
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -33,7 +35,7 @@ export async function GET(
     // Verify chatbot belongs to user's organization
     const chatbot = await prisma.chatbot.findFirst({
       where: {
-        id: params.id,
+        id: id,
         organizationId: { in: userOrganizationIds },
       },
     });
@@ -44,7 +46,7 @@ export async function GET(
 
     // Get context blocks for the chatbot
     const contextBlocks = await prisma.contextBlock.findMany({
-      where: { chatbotId: params.id },
+      where: { chatbotId: id },
       orderBy: { createdAt: "desc" },
     });
 
@@ -61,11 +63,11 @@ export async function GET(
 // POST /api/chatbots/[id]/context-blocks - Create a new context block
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
-
+    const { id } = await params;
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -99,7 +101,7 @@ export async function POST(
     // Verify chatbot belongs to user's organization
     const chatbot = await prisma.chatbot.findFirst({
       where: {
-        id: params.id,
+        id: id,
         organizationId: { in: userOrganizationIds },
       },
     });
@@ -115,7 +117,7 @@ export async function POST(
         content,
         type: type || "TEXT",
         metadata: metadata || null,
-        chatbotId: params.id,
+        chatbotId: id,
       },
     });
 

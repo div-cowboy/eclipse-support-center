@@ -11,6 +11,7 @@ import {
 } from "@/components/shadcn/ui/card";
 import { Badge } from "@/components/shadcn/ui/badge";
 import { Send, Bot, User, FileText } from "lucide-react";
+import { VectorSearchResult } from "@/lib/vector-db";
 
 interface ChatMessage {
   id: string;
@@ -101,7 +102,7 @@ export function ChatInterface({
 
         if (reader) {
           let assistantMessage: ChatMessage | null = null;
-          let sources: any[] = [];
+          let sources: VectorSearchResult[] = [];
 
           while (true) {
             const { done, value } = await reader.read();

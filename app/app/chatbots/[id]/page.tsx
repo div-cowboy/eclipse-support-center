@@ -6,7 +6,6 @@ import { Button } from "@/components/shadcn/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/shadcn/ui/card";
@@ -20,15 +19,20 @@ import {
   FileText,
   MessageCircle,
 } from "lucide-react";
-import { ContextBlockList } from "@/components/chatbots/ContextBlockList";
+import {
+  ContextBlockList,
+  ContextBlock as ContextBlockListType,
+} from "@/components/chatbots/ContextBlockList";
 import { ContextBlockForm } from "@/components/chatbots/ContextBlockForm";
+import { ChatbotConfig } from "@/lib/chatbot-service-enhanced";
+import { ContextBlock } from "@prisma/client";
 
 interface Chatbot {
   id: string;
   name: string;
   description?: string;
   status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
-  config?: any;
+  config?: ChatbotConfig;
   createdAt: Date;
   updatedAt: Date;
   contextBlocks: ContextBlock[];
@@ -36,23 +40,6 @@ interface Chatbot {
     chats: number;
     contextBlocks: number;
   };
-}
-
-interface ContextBlock {
-  id: string;
-  title: string;
-  content: string;
-  type:
-    | "TEXT"
-    | "CODE"
-    | "DOCUMENTATION"
-    | "FAQ"
-    | "TROUBLESHOOTING"
-    | "TUTORIAL";
-  metadata?: any;
-  vectorId?: string;
-  createdAt: Date;
-  updatedAt: Date;
 }
 
 export default function ChatbotDetailPage() {
@@ -120,7 +107,7 @@ export default function ChatbotDetailPage() {
       | "FAQ"
       | "TROUBLESHOOTING"
       | "TUTORIAL";
-    metadata?: any;
+    metadata?: ContextBlock["metadata"];
   }) => {
     try {
       const url = editingContextBlock
@@ -180,9 +167,15 @@ export default function ChatbotDetailPage() {
     }
   };
 
-  const handleContextBlockEdit = (contextBlock: ContextBlock) => {
-    setEditingContextBlock(contextBlock);
-    setShowContextForm(true);
+  const handleContextBlockEdit = (contextBlock: ContextBlockListType) => {
+    // Find the original Prisma ContextBlock to set as editing
+    const originalBlock = chatbot?.contextBlocks.find(
+      (block) => block.id === contextBlock.id
+    );
+    if (originalBlock) {
+      setEditingContextBlock(originalBlock);
+      setShowContextForm(true);
+    }
   };
 
   const handleAddContextBlock = () => {
@@ -389,7 +382,26 @@ export default function ChatbotDetailPage() {
       </div>
 
       <ContextBlockList
-        contextBlocks={chatbot.contextBlocks}
+        contextBlocks={chatbot.contextBlocks.map(
+          (block): ContextBlockListType => ({
+            id: block.id,
+            title: block.title,
+            content: block.content,
+            type: block.type,
+            metadata: block.metadata
+              ? {
+                  title: block.title,
+                  content: block.content,
+                  type: block.type,
+                  chatbotId: block.chatbotId,
+                  contextBlockId: block.id,
+                }
+              : undefined,
+            vectorId: block.vectorId || undefined,
+            createdAt: block.createdAt,
+            updatedAt: block.updatedAt,
+          })
+        )}
         onEdit={handleContextBlockEdit}
         onDelete={handleContextBlockDelete}
         onAdd={handleAddContextBlock}

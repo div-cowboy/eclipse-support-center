@@ -25,7 +25,7 @@ interface Chatbot {
     maxSources?: number;
     includeOrganizationDocs?: boolean;
     includeContextBlocks?: boolean;
-    coreRules?: any;
+    coreRules?: Record<string, unknown>;
   };
   organizationId: string;
 }
@@ -78,7 +78,7 @@ export default function EditChatbotPage() {
       maxSources?: number;
       includeOrganizationDocs?: boolean;
       includeContextBlocks?: boolean;
-      coreRules?: any;
+      coreRules?: Record<string, unknown>;
     };
   }) => {
     setSubmitting(true);

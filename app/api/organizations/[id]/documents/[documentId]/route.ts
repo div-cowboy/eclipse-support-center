@@ -6,9 +6,10 @@ import { OrganizationDocumentVectorService } from "@/lib/vector-db";
 // GET /api/organizations/[id]/documents/[documentId] - Get a specific document
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string; documentId: string } }
+  { params }: { params: Promise<{ id: string; documentId: string }> }
 ) {
   try {
+    const { id, documentId } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -30,7 +31,7 @@ export async function GET(
 
     // Verify organization belongs to user
     const userOrganizationIds = user.organizations.map((org) => org.id);
-    if (!userOrganizationIds.includes(params.id)) {
+    if (!userOrganizationIds.includes(id)) {
       return NextResponse.json(
         { error: "Organization not found" },
         { status: 404 }
@@ -40,8 +41,8 @@ export async function GET(
     // Get the specific document
     const document = await prisma.organizationDocument.findFirst({
       where: {
-        id: params.documentId,
-        organizationId: params.id,
+        id: documentId,
+        organizationId: id,
       },
       include: {
         uploader: {
@@ -70,9 +71,10 @@ export async function GET(
 // PUT /api/organizations/[id]/documents/[documentId] - Update a document
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string; documentId: string } }
+  { params }: { params: Promise<{ id: string; documentId: string }> }
 ) {
   try {
+    const { id, documentId } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -104,7 +106,7 @@ export async function PUT(
 
     // Verify organization belongs to user
     const userOrganizationIds = user.organizations.map((org) => org.id);
-    if (!userOrganizationIds.includes(params.id)) {
+    if (!userOrganizationIds.includes(id)) {
       return NextResponse.json(
         { error: "Organization not found" },
         { status: 404 }
@@ -114,8 +116,8 @@ export async function PUT(
     // Find and update the document
     const document = await prisma.organizationDocument.findFirst({
       where: {
-        id: params.documentId,
-        organizationId: params.id,
+        id: documentId,
+        organizationId: id,
       },
     });
 
@@ -128,7 +130,7 @@ export async function PUT(
 
     // Update the document
     const updatedDocument = await prisma.organizationDocument.update({
-      where: { id: params.documentId },
+      where: { id: documentId },
       data: {
         title,
         content,
@@ -183,9 +185,10 @@ export async function PUT(
 // DELETE /api/organizations/[id]/documents/[documentId] - Delete a document
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string; documentId: string } }
+  { params }: { params: Promise<{ id: string; documentId: string }> }
 ) {
   try {
+    const { id, documentId } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -207,7 +210,7 @@ export async function DELETE(
 
     // Verify organization belongs to user
     const userOrganizationIds = user.organizations.map((org) => org.id);
-    if (!userOrganizationIds.includes(params.id)) {
+    if (!userOrganizationIds.includes(id)) {
       return NextResponse.json(
         { error: "Organization not found" },
         { status: 404 }
@@ -217,8 +220,8 @@ export async function DELETE(
     // Find the document
     const document = await prisma.organizationDocument.findFirst({
       where: {
-        id: params.documentId,
-        organizationId: params.id,
+        id: documentId,
+        organizationId: id,
       },
     });
 
@@ -237,7 +240,7 @@ export async function DELETE(
 
     // Delete the document
     await prisma.organizationDocument.delete({
-      where: { id: params.documentId },
+      where: { id: documentId },
     });
 
     return NextResponse.json({ message: "Document deleted successfully" });

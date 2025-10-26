@@ -44,7 +44,7 @@ export default function NewChatbotPage() {
     description?: string;
     status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
     organizationId: string;
-    config?: any;
+    config?: Record<string, unknown>;
   }) => {
     setLoading(true);
     try {

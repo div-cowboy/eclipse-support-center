@@ -33,7 +33,7 @@ export interface OrganizationDocument {
     | "GUIDE"
     | "FAQ"
     | "ANNOUNCEMENT";
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 interface DocumentUploadFormProps {
@@ -51,7 +51,14 @@ export function DocumentUploadForm({
   const [formData, setFormData] = useState({
     title: "",
     content: "",
-    type: "TEXT" as const,
+    type: "TEXT" as
+      | "TEXT"
+      | "POLICY"
+      | "PROCEDURE"
+      | "MANUAL"
+      | "GUIDE"
+      | "FAQ"
+      | "ANNOUNCEMENT",
   });
 
   const handleSubmit = () => {
@@ -178,7 +185,7 @@ export function DocumentUploadForm({
           <CardHeader>
             <CardTitle className="text-base">Add Document</CardTitle>
             <CardDescription>
-              Add text content that will be stored in your organization's
+              Add text content that will be stored in your organization&apos;s
               knowledge base
             </CardDescription>
           </CardHeader>
@@ -285,7 +292,7 @@ export function DocumentUploadForm({
             <FileText className="h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
             <p className="text-muted-foreground text-center mb-4">
-              Add documents to build your organization's knowledge base
+              Add documents to build your organization&apos;s knowledge base
             </p>
             <Button onClick={() => setShowForm(true)}>
               <Plus className="mr-2 h-4 w-4" />

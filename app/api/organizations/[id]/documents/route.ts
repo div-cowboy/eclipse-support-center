@@ -6,9 +6,10 @@ import { OrganizationDocumentVectorService } from "@/lib/vector-db";
 // GET /api/organizations/[id]/documents - Get all documents for an organization
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -30,7 +31,7 @@ export async function GET(
 
     // Verify organization belongs to user
     const userOrganizationIds = user.organizations.map((org) => org.id);
-    if (!userOrganizationIds.includes(params.id)) {
+    if (!userOrganizationIds.includes(id)) {
       return NextResponse.json(
         { error: "Organization not found" },
         { status: 404 }
@@ -39,7 +40,7 @@ export async function GET(
 
     // Get documents for the organization
     const documents = await prisma.organizationDocument.findMany({
-      where: { organizationId: params.id },
+      where: { organizationId: id },
       include: {
         uploader: {
           select: { id: true, name: true, email: true },
@@ -61,9 +62,10 @@ export async function GET(
 // POST /api/organizations/[id]/documents - Create a new organization document
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -95,7 +97,7 @@ export async function POST(
 
     // Verify organization belongs to user
     const userOrganizationIds = user.organizations.map((org) => org.id);
-    if (!userOrganizationIds.includes(params.id)) {
+    if (!userOrganizationIds.includes(id)) {
       return NextResponse.json(
         { error: "Organization not found" },
         { status: 404 }
@@ -109,7 +111,7 @@ export async function POST(
         content,
         type: type || "TEXT",
         metadata: metadata || null,
-        organizationId: params.id,
+        organizationId: id,
         uploadedBy: user.id,
       },
       include: {
@@ -135,7 +137,7 @@ export async function POST(
             title,
             content,
             type || "TEXT",
-            params.id
+            id
           );
 
         // Update document with vector ID

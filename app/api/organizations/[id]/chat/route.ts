@@ -2,13 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
 import { chatbotService } from "@/lib/chatbot-service";
+import { ChatMessage } from "@/lib/chatbot-service";
 
 // POST /api/organizations/[id]/chat - Chat with organization's knowledge base
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -37,7 +39,7 @@ export async function POST(
     // Verify user has access to this organization
     const organization = await prisma.organization.findFirst({
       where: {
-        id: params.id,
+        id: id,
         users: {
           some: {
             id: user.id,
@@ -70,19 +72,14 @@ export async function POST(
 
     // Handle streaming response
     if (stream) {
-      return handleStreamingResponse(
-        message,
-        params.id,
-        conversationHistory,
-        request
-      );
+      return handleStreamingResponse(message, id, conversationHistory);
     }
 
     // Handle regular response
     try {
       const response = await chatbotService.generateResponse(
         message,
-        params.id,
+        id,
         conversationHistory,
         {
           maxSources: 5,
@@ -117,8 +114,7 @@ export async function POST(
 async function handleStreamingResponse(
   message: string,
   organizationId: string,
-  conversationHistory: any[],
-  request: NextRequest
+  conversationHistory: ChatMessage[]
 ) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -177,9 +173,10 @@ async function handleStreamingResponse(
 // GET /api/organizations/[id]/chat - Get chat status and configuration
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -198,7 +195,7 @@ export async function GET(
     // Verify user has access to this organization
     const organization = await prisma.organization.findFirst({
       where: {
-        id: params.id,
+        id: id,
         users: {
           some: {
             id: user.id,

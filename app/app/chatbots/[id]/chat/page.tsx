@@ -1,8 +1,6 @@
 // "use client";
 
 import { ChatbotChatInterface } from "@/components/chat/ChatbotChatInterface";
-import { Button } from "@/components/shadcn/ui/button";
-import { ArrowLeft } from "lucide-react";
 
 import { use } from "react";
 

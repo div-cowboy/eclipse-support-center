@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
 import {
   enhancedChatbotService,
@@ -7,19 +6,13 @@ import {
   ChatMessage,
 } from "@/lib/chatbot-service-enhanced";
 
-// POST /api/chatbots/[id]/chat - Chat with a specific chatbot
+// POST /api/embed/chatbots/[id]/chat - Chat with a specific chatbot (public for embedding)
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await params;
-    const session = await auth();
-
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
     const body = await request.json();
     const {
       message,
@@ -35,29 +28,19 @@ export async function POST(
       );
     }
 
-    // Get user
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    // Verify user has access to this chatbot's organization
-    const chatbot = await prisma.chatbot.findFirst({
+    // Get chatbot info without authentication for embedding
+    const chatbot = await prisma.chatbot.findUnique({
       where: {
         id: id,
-        organization: {
-          users: {
-            some: {
-              id: user.id,
-            },
-          },
-        },
+        status: "ACTIVE", // Only allow active chatbots to be embedded
       },
       include: {
-        organization: true,
+        organization: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         contextBlocks: {
           select: {
             id: true,
@@ -136,7 +119,7 @@ export async function POST(
       );
     }
   } catch (error) {
-    console.error("Error in chatbot chat endpoint:", error);
+    console.error("Error in embed chatbot chat endpoint:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }
@@ -198,96 +181,9 @@ async function handleStreamingResponse(
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*", // Allow embedding from any domain
+      "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
     },
   });
-}
-
-// GET /api/chatbots/[id]/chat - Get chatbot status and configuration
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const session = await auth();
-
-    if (!session?.user?.email) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    // Get user
-    const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
-    });
-
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    // Verify user has access to this chatbot's organization
-    const chatbot = await prisma.chatbot.findFirst({
-      where: {
-        id: id,
-        organization: {
-          users: {
-            some: {
-              id: user.id,
-            },
-          },
-        },
-      },
-      include: {
-        organization: {
-          select: {
-            id: true,
-            name: true,
-            documents: {
-              select: {
-                id: true,
-                title: true,
-                type: true,
-                createdAt: true,
-              },
-            },
-          },
-        },
-        contextBlocks: {
-          select: {
-            id: true,
-            title: true,
-            type: true,
-            createdAt: true,
-          },
-        },
-      },
-    });
-
-    if (!chatbot) {
-      return NextResponse.json({ error: "Chatbot not found" }, { status: 404 });
-    }
-
-    // Get service status
-    const serviceStatus = enhancedChatbotService.getStatus();
-
-    return NextResponse.json({
-      chatbot: {
-        id: chatbot.id,
-        name: chatbot.name,
-        description: chatbot.description,
-        status: chatbot.status,
-        config: chatbot.config,
-        organization: chatbot.organization,
-        contextBlockCount: chatbot.contextBlocks.length,
-        organizationDocumentCount: chatbot.organization.documents.length,
-      },
-      serviceStatus,
-      available: serviceStatus.fullyConfigured,
-    });
-  } catch (error) {
-    console.error("Error getting chatbot status:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
-  }
 }

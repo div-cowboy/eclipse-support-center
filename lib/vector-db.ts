@@ -26,7 +26,7 @@ export interface VectorDatabase {
   search(
     query: number[],
     topK?: number,
-    filter?: Record<string, any>
+    filter?: Record<string, unknown>
   ): Promise<VectorSearchResult[]>;
   delete(ids: string[]): Promise<void>;
   update(id: string, embedding: VectorEmbedding): Promise<void>;
@@ -34,8 +34,10 @@ export interface VectorDatabase {
 
 // Example implementation for Pinecone (you'll need to install @pinecone-database/pinecone)
 export class PineconeVectorDB implements VectorDatabase {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private index: any; // Pinecone index
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(index: any) {
     this.index = index;
   }
@@ -53,7 +55,7 @@ export class PineconeVectorDB implements VectorDatabase {
   async search(
     query: number[],
     topK: number = 10,
-    filter?: Record<string, any>
+    filter?: Record<string, unknown>
   ): Promise<VectorSearchResult[]> {
     const searchRequest = {
       vector: query,
@@ -64,11 +66,7 @@ export class PineconeVectorDB implements VectorDatabase {
 
     const searchResponse = await this.index.query(searchRequest);
 
-    return searchResponse.matches.map((match: any) => ({
-      id: match.id,
-      score: match.score,
-      metadata: match.metadata,
-    }));
+    return searchResponse.matches.map((match: VectorSearchResult) => match);
   }
 
   async delete(ids: string[]): Promise<void> {
@@ -88,8 +86,10 @@ export class PineconeVectorDB implements VectorDatabase {
 
 // Example implementation for Chroma (you'll need to install chromadb)
 export class ChromaVectorDB implements VectorDatabase {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private collection: any; // Chroma collection
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   constructor(collection: any) {
     this.collection = collection;
   }
@@ -109,7 +109,7 @@ export class ChromaVectorDB implements VectorDatabase {
   async search(
     query: number[],
     topK: number = 10,
-    filter?: Record<string, any>
+    filter?: Record<string, unknown>
   ): Promise<VectorSearchResult[]> {
     const searchResponse = await this.collection.query({
       queryEmbeddings: [query],
@@ -380,6 +380,7 @@ export class OrganizationDocumentVectorService {
         type,
         chatbotId: "", // Not applicable for org documents
         contextBlockId: documentId,
+        organizationId: organizationId,
       },
     };
 
@@ -404,26 +405,25 @@ export class OrganizationDocumentVectorService {
 }
 
 // Factory function to create vector database instance
-export function createVectorDatabase(
-  type: "pinecone" | "chroma",
-  config: any
-): VectorDatabase {
-  switch (type) {
-    case "pinecone":
-      // Initialize Pinecone
-      // const pinecone = new Pinecone({ apiKey: config.apiKey });
-      // const index = pinecone.index(config.indexName);
-      // return new PineconeVectorDB(index);
-      throw new Error("Pinecone implementation not configured");
+// export function createVectorDatabase(
+//   type: "pinecone" | "chroma"
+// ): VectorDatabase {
+//   switch (type) {
+//     case "pinecone":
+//       // Initialize Pinecone
+//       // const pinecone = new Pinecone({ apiKey: config.apiKey });
+//       // const index = pinecone.index(config.indexName);
+//       // return new PineconeVectorDB(index);
+//       throw new Error("Pinecone implementation not configured");
 
-    case "chroma":
-      // Initialize Chroma
-      // const chroma = new ChromaClient({ path: config.path });
-      // const collection = chroma.getCollection({ name: config.collectionName });
-      // return new ChromaVectorDB(collection);
-      throw new Error("Chroma implementation not configured");
+//     case "chroma":
+//       // Initialize Chroma
+//       // const chroma = new ChromaClient({ path: config.path });
+//       // const collection = chroma.getCollection({ name: config.collectionName });
+//       // return new ChromaVectorDB(collection);
+//       throw new Error("Chroma implementation not configured");
 
-    default:
-      throw new Error(`Unsupported vector database type: ${type}`);
-  }
-}
+//     default:
+//       throw new Error(`Unsupported vector database type: ${type}`);
+//   }
+// }

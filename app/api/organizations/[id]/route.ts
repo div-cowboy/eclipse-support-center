@@ -5,9 +5,10 @@ import { prisma } from "@/lib/prisma";
 // GET /api/organizations/[id] - Get a specific organization
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -26,7 +27,7 @@ export async function GET(
     // Get the organization and verify user has access
     const organization = await prisma.organization.findFirst({
       where: {
-        id: params.id,
+        id: id,
         users: {
           some: {
             id: user.id,
@@ -73,9 +74,10 @@ export async function GET(
 // PUT /api/organizations/[id] - Update a specific organization
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -86,7 +88,7 @@ export async function PUT(
     const { name, description, slug, documents } = body;
 
     console.log("Received organization update request:", {
-      id: params.id,
+      id: id,
       name,
       description,
       slug,
@@ -113,7 +115,7 @@ export async function PUT(
     // Verify user has access to this organization
     const existingOrg = await prisma.organization.findFirst({
       where: {
-        id: params.id,
+        id: id,
         users: {
           some: {
             id: user.id,
@@ -133,7 +135,7 @@ export async function PUT(
     const slugConflict = await prisma.organization.findFirst({
       where: {
         slug,
-        id: { not: params.id },
+        id: { not: id },
       },
     });
 
@@ -146,7 +148,7 @@ export async function PUT(
 
     // Update organization
     const organization = await prisma.organization.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         name,
         description: description || null,
@@ -175,7 +177,7 @@ export async function PUT(
       try {
         // Delete existing documents for this organization
         await prisma.organizationDocument.deleteMany({
-          where: { organizationId: params.id },
+          where: { organizationId: id },
         });
 
         // Create new documents
@@ -203,7 +205,7 @@ export async function PUT(
                   metadata: doc.metadata
                     ? JSON.parse(JSON.stringify(doc.metadata))
                     : undefined,
-                  organizationId: params.id,
+                  organizationId: id,
                   uploadedBy: user.id,
                 },
               });
@@ -223,7 +225,7 @@ export async function PUT(
         }>;
 
         console.log(
-          `Updated ${createdDocuments.length} documents for organization ${params.id}`
+          `Updated ${createdDocuments.length} documents for organization ${id}`
         );
       } catch (docError) {
         console.error("Error updating documents:", docError);
@@ -261,7 +263,7 @@ export async function PUT(
                     doc.title,
                     doc.content,
                     doc.type,
-                    params.id
+                    id
                   );
                 await prisma.organizationDocument.update({
                   where: { id: doc.id },
@@ -301,17 +303,17 @@ export async function PUT(
           );
 
           // Check if there's an existing vector for this organization description
-          const existingVectorId = `org_desc_${params.id}`;
+          const existingVectorId = `org_desc_${id}`;
 
           // Update the vector embedding
           await vectorService.updateOrganizationDescriptionEmbedding(
             existingVectorId,
-            params.id,
+            id,
             organization.name,
             organization.description
           );
           console.log(
-            `Updated vector embedding for organization description: ${params.id}`
+            `Updated vector embedding for organization description: ${id}`
           );
         } else {
           console.warn(
@@ -340,9 +342,10 @@ export async function PUT(
 // DELETE /api/organizations/[id] - Delete a specific organization
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -361,7 +364,7 @@ export async function DELETE(
     // Verify user has access to this organization
     const existingOrg = await prisma.organization.findFirst({
       where: {
-        id: params.id,
+        id: id,
         users: {
           some: {
             id: user.id,
@@ -379,7 +382,7 @@ export async function DELETE(
 
     // Delete organization (this will cascade delete related records)
     await prisma.organization.delete({
-      where: { id: params.id },
+      where: { id: id },
     });
 
     return NextResponse.json({ message: "Organization deleted successfully" });

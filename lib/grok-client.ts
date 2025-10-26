@@ -32,13 +32,13 @@ export interface GrokStreamChunk {
 }
 
 export class GrokClient {
-  private groq: Groq;
+  private groqClient!: Groq;
   private defaultModel: string;
   private defaultOptions: GrokChatOptions;
 
   constructor(apiKey?: string) {
-    this.grok = new Groq({
-      apiKey: apiKey || process.env.GROQ_API_KEY,
+    this.groqClient = new Groq({
+      apiKey: apiKey || process.env.GROQ_API_KEY || "",
     });
 
     // Default model - you can change this based on your needs
@@ -64,14 +64,14 @@ export class GrokClient {
     const config = { ...this.defaultOptions, ...options };
 
     try {
-      const completion = await this.grok.chat.completions.create({
+      const completion = await this.groqClient.chat.completions.create({
         messages: messages.map((msg) => ({
           role: msg.role,
           content: msg.content,
         })),
         model: config.model!,
         temperature: config.temperature,
-        max_completion_tokens: config.maxCompletionTokens,
+        max_tokens: config.maxCompletionTokens,
         top_p: config.topP,
         stream: false,
         stop: config.stop,
@@ -112,14 +112,14 @@ export class GrokClient {
     const config = { ...this.defaultOptions, ...options, stream: true };
 
     try {
-      const completion = await this.grok.chat.completions.create({
+      const completion = await this.groqClient.chat.completions.create({
         messages: messages.map((msg) => ({
           role: msg.role,
           content: msg.content,
         })),
         model: config.model!,
         temperature: config.temperature,
-        max_completion_tokens: config.maxCompletionTokens,
+        max_tokens: config.maxCompletionTokens,
         top_p: config.topP,
         stream: true,
         stop: config.stop,
@@ -255,7 +255,7 @@ export class GrokClient {
    * Check if the client is properly configured
    */
   isConfigured(): boolean {
-    return !!(process.env.GROQ_API_KEY || this.grok.apiKey);
+    return !!(process.env.GROQ_API_KEY || this.groqClient.apiKey);
   }
 
   /**

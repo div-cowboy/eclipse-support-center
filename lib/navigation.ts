@@ -12,9 +12,14 @@ export const navigationLinks: NavigationItem[] = [
     icon: "LayoutDashboard",
   },
   {
-    title: "Chats and chatbots",
+    title: "Support Chats",
     href: "/app/chats",
     icon: "MessageSquare",
+  },
+  {
+    title: "Chatbots",
+    href: "/app/chatbots",
+    icon: "Bot",
   },
   {
     title: "Organizations",

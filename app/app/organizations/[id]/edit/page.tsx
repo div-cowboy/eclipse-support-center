@@ -19,6 +19,7 @@ import {
   DocumentUploadForm,
   OrganizationDocument,
 } from "@/components/organizations/DocumentUploadForm";
+import { VectorSearchResult } from "@/lib/vector-db";
 
 interface Organization {
   id: string;
@@ -33,7 +34,7 @@ interface Organization {
     title: string;
     content: string;
     type: string;
-    metadata: any;
+    metadata: VectorSearchResult["metadata"];
     createdAt: string;
   }[];
 }
@@ -70,13 +71,15 @@ export default function EditOrganizationPage() {
           });
           // Populate documents if they exist
           if (data.documents && Array.isArray(data.documents)) {
-            const formattedDocuments = data.documents.map((doc: any) => ({
-              id: doc.id,
-              title: doc.title,
-              content: doc.content,
-              type: doc.type,
-              metadata: doc.metadata,
-            }));
+            const formattedDocuments = data.documents.map(
+              (doc: OrganizationDocument) => ({
+                id: doc.id,
+                title: doc.title,
+                content: doc.content,
+                type: doc.type,
+                metadata: doc.metadata,
+              })
+            );
             setDocuments(formattedDocuments);
           }
         } else {

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
   Table,
   TableBody,
@@ -29,8 +28,9 @@ import {
   Wrench,
   GraduationCap,
 } from "lucide-react";
+import { VectorSearchResult } from "@/lib/vector-db";
 
-interface ContextBlock {
+export interface ContextBlock {
   id: string;
   title: string;
   content: string;
@@ -41,7 +41,7 @@ interface ContextBlock {
     | "FAQ"
     | "TROUBLESHOOTING"
     | "TUTORIAL";
-  metadata?: any;
+  metadata?: VectorSearchResult["metadata"];
   vectorId?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -140,8 +140,8 @@ export function ContextBlockList({
           <div>
             <CardTitle>Context Blocks</CardTitle>
             <CardDescription>
-              Manage your chatbot's knowledge base. These blocks are vectorized
-              for intelligent responses.
+              Manage your chatbot&apos;s knowledge base. These blocks are
+              vectorized for intelligent responses.
             </CardDescription>
           </div>
           <Button onClick={onAdd}>

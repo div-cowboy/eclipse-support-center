@@ -5,9 +5,10 @@ import { prisma } from "@/lib/prisma";
 // POST /api/organizations/[id]/documents/search - Search organization documents semantically
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth();
 
     if (!session?.user?.email) {
@@ -36,7 +37,7 @@ export async function POST(
     // Verify user has access to this organization
     const organization = await prisma.organization.findFirst({
       where: {
-        id: params.id,
+        id: id,
         users: {
           some: {
             id: user.id,
@@ -70,7 +71,7 @@ export async function POST(
       const vectorService = new OrganizationDocumentVectorService(vectorDB);
       const searchResults = await vectorService.searchOrganizationDocuments(
         query,
-        params.id,
+        id,
         topK
       );
 
@@ -82,7 +83,7 @@ export async function POST(
       const documents = await prisma.organizationDocument.findMany({
         where: {
           id: { in: documentIds },
-          organizationId: params.id,
+          organizationId: id,
         },
         select: {
           id: true,

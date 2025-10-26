@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma";
 // GET /api/chatbots/[id]/chats - Get chats for a specific chatbot
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await params;
   try {
     const session = await auth();
 
@@ -38,7 +39,7 @@ export async function GET(
     // Verify chatbot belongs to user's organization
     const chatbot = await prisma.chatbot.findFirst({
       where: {
-        id: params.id,
+        id: id,
         organizationId: { in: userOrganizationIds },
       },
     });
@@ -50,7 +51,7 @@ export async function GET(
     // Get chats for the chatbot
     const chats = await prisma.chat.findMany({
       where: {
-        chatbotId: params.id,
+        chatbotId: id,
       },
       include: {
         _count: {

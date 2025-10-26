@@ -144,8 +144,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const session = await auth();
-
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -163,10 +163,13 @@ export async function DELETE(
       );
     }
 
+    // Get user organization IDs
+    const userOrganizationIds = user.organizations.map((org) => org.id);
+
     // Check if chatbot exists and belongs to user's organization
     const existingChatbot = await prisma.chatbot.findFirst({
       where: {
-        id: params.id,
+        id: id,
         organizationId: { in: userOrganizationIds },
       },
     });
@@ -177,7 +180,7 @@ export async function DELETE(
 
     // Delete chatbot (this will cascade delete context blocks and chats)
     await prisma.chatbot.delete({
-      where: { id: params.id },
+      where: { id: id },
     });
 
     return NextResponse.json({ message: "Chatbot deleted successfully" });

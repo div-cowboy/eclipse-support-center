@@ -2,8 +2,10 @@
 // This service combines semantic search with Groq's text generation
 
 import { grokClient, GrokMessage } from "./grok-client";
-import { OrganizationDocumentVectorService } from "./vector-db";
-import { VectorDatabase } from "./vector-db";
+import {
+  OrganizationDocumentVectorService,
+  VectorSearchResult,
+} from "./vector-db";
 import { initializeVectorDatabase } from "./vector-config";
 
 export interface ChatMessage {
@@ -150,7 +152,7 @@ export class ChatbotService {
       maxTokens?: number;
     } = {}
   ): AsyncGenerator<
-    { content: string; isComplete: boolean; sources?: any[] },
+    { content: string; isComplete: boolean; sources?: VectorSearchResult[] },
     void,
     unknown
   > {
@@ -178,26 +180,15 @@ export class ChatbotService {
       );
 
       // Step 5: Stream response with Groq
-      let fullContent = "";
+
       for await (const chunk of grokClient.chatStream(grokMessages, {
         temperature,
         maxCompletionTokens: maxTokens,
       })) {
-        fullContent += chunk.content;
         yield {
           content: chunk.content,
           isComplete: chunk.isComplete,
-          sources: chunk.isComplete
-            ? relevantDocs.map((doc) => ({
-                documentId: doc.document?.id || "",
-                title: doc.document?.title || "",
-                score: doc.score,
-                snippet: this.extractSnippet(
-                  doc.document?.content || "",
-                  userMessage
-                ),
-              }))
-            : undefined,
+          sources: chunk.isComplete ? relevantDocs : undefined,
         };
       }
     } catch (error) {
@@ -227,7 +218,7 @@ export class ChatbotService {
         content: string;
         type: string;
       };
-      metadata: any;
+      metadata: VectorSearchResult["metadata"];
     }>
   > {
     if (!this.vectorService) {
