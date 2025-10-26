@@ -10,7 +10,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/shadcn/ui/card";
-import { ArrowLeft, Clock, CheckCircle, AlertCircle } from "lucide-react";
+import {
+  ArrowLeft,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  Bot,
+  Building2,
+  MessageSquare,
+} from "lucide-react";
 import { TraditionalChatInterface } from "@/components/chat/TraditionalChatInterface";
 import { VectorSearchResult } from "@/lib/vector-db";
 
@@ -30,6 +38,16 @@ interface TraditionalChat {
   }>;
   _count: {
     messages: number;
+  };
+  chatbot?: {
+    id: string;
+    name: string;
+    description?: string;
+    organization: {
+      id: string;
+      name: string;
+      slug: string;
+    };
   };
 }
 
@@ -121,7 +139,8 @@ export default function ChatDetailPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center gap-4">
         <Button
           variant="outline"
@@ -132,7 +151,7 @@ export default function ChatDetailPage() {
           Back
         </Button>
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-2">
+          <div className="flex items-center gap-2 mb-1">
             {getStatusIcon(chat.status)}
             <h1 className="text-2xl font-bold tracking-tight">{chat.title}</h1>
             <Badge
@@ -141,6 +160,23 @@ export default function ChatDetailPage() {
             >
               {chat.status}
             </Badge>
+            {chat.chatbot ? (
+              <Badge
+                variant="outline"
+                className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800"
+              >
+                <Bot className="h-3 w-3 mr-1" />
+                Embedded Chat
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className="text-xs bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800"
+              >
+                <MessageSquare className="h-3 w-3 mr-1" />
+                Direct Support
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
             <span>Created: {formatDate(chat.createdAt)}</span>
@@ -150,18 +186,113 @@ export default function ChatDetailPage() {
         </div>
       </div>
 
-      {chat.description && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Description</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-muted-foreground">{chat.description}</p>
-          </CardContent>
-        </Card>
-      )}
+      {/* Two Column Layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4">
+        {/* Left Column - Chat Interface */}
+        <div className="min-h-[calc(100vh-200px)]">
+          <TraditionalChatInterface chatId={chat.id} className="h-full" />
+        </div>
 
-      <TraditionalChatInterface chatId={chat.id} className="h-[700px]" />
+        {/* Right Column - Information Cards */}
+        <div className="space-y-4">
+          {/* Chat Details Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                Chat Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">
+                  Status
+                </p>
+                <div className="flex items-center gap-2">
+                  {getStatusIcon(chat.status)}
+                  <Badge
+                    variant="outline"
+                    className={`text-xs ${getStatusColor(chat.status)}`}
+                  >
+                    {chat.status}
+                  </Badge>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">
+                  Created
+                </p>
+                <p className="text-sm">{formatDate(chat.createdAt)}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">
+                  Last Updated
+                </p>
+                <p className="text-sm">{formatDate(chat.updatedAt)}</p>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground mb-1">
+                  Total Messages
+                </p>
+                <p className="text-sm">{chat._count.messages}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Chatbot Information Card */}
+          {chat.chatbot && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Bot className="h-5 w-5" />
+                  Chatbot
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                    Name
+                  </p>
+                  <p className="text-sm font-semibold">{chat.chatbot.name}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                    Organization
+                  </p>
+                  <Badge variant="secondary" className="text-xs">
+                    <Building2 className="h-3 w-3 mr-1" />
+                    {chat.chatbot.organization.name}
+                  </Badge>
+                </div>
+                {chat.chatbot.description && (
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground mb-1">
+                      Description
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {chat.chatbot.description}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Chat Description */}
+          {chat.description && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Description</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  {chat.description}
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

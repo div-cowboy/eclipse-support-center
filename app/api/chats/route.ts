@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/chats - List all traditional chats (not linked to chatbots)
+// GET /api/chats - List all chats from user's organizations (both embedded and traditional)
 export async function GET() {
   try {
     const session = await auth();
@@ -10,18 +10,52 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user from database
+    // Get user from database with their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
+      include: {
+        organizations: {
+          select: {
+            id: true,
+          },
+        },
+      },
     });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // Get all chatbots from user's organizations
+    const organizationIds = user.organizations.map((org) => org.id);
+    const chatbots = await prisma.chatbot.findMany({
+      where: {
+        organizationId: {
+          in: organizationIds,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const chatbotIds = chatbots.map((chatbot) => chatbot.id);
+
+    // Fetch all chats from user's organizations:
+    // 1. Chats linked to organization chatbots (embedded chats)
+    // 2. Traditional chats (chatbotId: null)
     const chats = await prisma.chat.findMany({
       where: {
-        chatbotId: null, // Traditional chats don't have a chatbotId
+        OR: [
+          {
+            chatbotId: {
+              in: chatbotIds,
+            },
+          },
+          {
+            chatbotId: null, // Traditional chats
+          },
+        ],
       },
       include: {
         _count: {
@@ -34,6 +68,16 @@ export async function GET() {
             createdAt: "desc",
           },
           take: 1, // Get the latest message for preview
+        },
+        chatbot: {
+          include: {
+            organization: {
+              select: {
+                id: true,
+                name: true,
+              },
+            },
+          },
         },
       },
       orderBy: {

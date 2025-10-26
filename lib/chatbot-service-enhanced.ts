@@ -8,8 +8,22 @@ import {
   OrganizationDescriptionVectorService,
   VectorSearchResult,
 } from "./vector-db";
-import { VectorDatabase } from "./vector-db";
 import { initializeVectorDatabase } from "./vector-config";
+
+/**
+ * Global rules that are appended to every chatbot's system prompt
+ * These ensure consistent behavior across all chatbots
+ */
+const GLOBAL_CHATBOT_RULES = [
+  "• ESCALATION PROTOCOL: ONLY trigger escalation if the user EXPLICITLY requests to speak with a human, real person, agent, or representative. Do NOT escalate for normal customer service questions (returns, exchanges, order status, product questions, etc.) even if the user uses the word 'request'.",
+  "• ESCALATION TRIGGERS (user must explicitly say one of these): 'speak to a human', 'talk to a person', 'speak to someone', 'contact a representative', 'talk to an agent', 'speak to a manager', 'I want a human', 'connect me with someone', 'transfer me to a person'",
+  "• DO NOT ESCALATE FOR: Questions about returns, exchanges, refunds, order status, shipping, product information, policies, or general customer service questions. These are normal support inquiries that you can handle.",
+  "• When escalation IS triggered, you MUST include the exact text [ESCALATION_REQUESTED] at the very end of your response (after all other content). This is a system marker and critical for routing.",
+  "• Respond empathetically when escalation is needed: 'I understand you'd like to speak with a human representative. I've noted your request and a customer support button will appear for you to connect with our team. Is there anything else I can help you with in the meantime?'",
+  "• Always prioritize user satisfaction and acknowledge when you may not be able to fully address their needs",
+  "• Be transparent about your limitations as an AI assistant",
+  "• Never pretend to be human or claim capabilities you don't have",
+];
 
 export interface ChatMessage {
   id: string;
@@ -25,6 +39,8 @@ export interface ChatMessage {
       type: "organization" | "context";
     }>;
     tokensUsed?: number;
+    escalationRequested?: boolean;
+    escalationReason?: string;
   };
 }
 
@@ -47,6 +63,7 @@ export interface ChatbotConfig {
   temperature?: number;
   maxTokens?: number;
   maxSources?: number;
+  minScore?: number; // Minimum similarity score threshold (0-1, default 0.35)
   includeOrganizationDocs?: boolean;
   includeContextBlocks?: boolean;
   coreRules?: {
@@ -69,6 +86,34 @@ export class EnhancedChatbotService {
     this.initializeVectorServices().catch((error) => {
       console.error("Failed to initialize vector services:", error);
     });
+  }
+
+  /**
+   * Detect if escalation was requested in the response
+   * Returns the cleaned content and escalation status
+   */
+  private detectEscalation(content: string): {
+    cleanContent: string;
+    escalationRequested: boolean;
+    escalationReason?: string;
+  } {
+    const escalationMarker = "[ESCALATION_REQUESTED]";
+    const hasEscalation = content.includes(escalationMarker);
+
+    if (hasEscalation) {
+      // Remove the marker from the content
+      const cleanContent = content.replace(escalationMarker, "").trim();
+      return {
+        cleanContent,
+        escalationRequested: true,
+        escalationReason: "User requested human assistance",
+      };
+    }
+
+    return {
+      cleanContent: content,
+      escalationRequested: false,
+    };
   }
 
   private async initializeVectorServices() {
@@ -108,6 +153,7 @@ export class EnhancedChatbotService {
       temperature: 0.7,
       maxTokens: 1024,
       maxSources: 8,
+      minScore: 0.35, // Filter out low-relevance results (below 35% similarity)
       includeOrganizationDocs: true,
       includeContextBlocks: true,
       coreRules: {
@@ -152,6 +198,7 @@ export class EnhancedChatbotService {
         chatbot.organizationId,
         chatbotId,
         finalConfig.maxSources!,
+        finalConfig.minScore!,
         finalConfig.includeOrganizationDocs!,
         finalConfig.includeContextBlocks!
       );
@@ -183,11 +230,14 @@ export class EnhancedChatbotService {
         maxCompletionTokens: finalConfig.maxTokens,
       });
 
-      // Step 6: Create response message
+      // Step 6: Detect escalation in response
+      const escalationDetection = this.detectEscalation(grokResponse.content);
+
+      // Step 7: Create response message
       const responseMessage: ChatMessage = {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         role: "assistant",
-        content: grokResponse.content,
+        content: escalationDetection.cleanContent,
         timestamp: new Date(),
         metadata: {
           sources: relevantDocs.map((doc) => ({
@@ -201,6 +251,8 @@ export class EnhancedChatbotService {
             type: doc.type as "organization" | "context",
           })),
           tokensUsed: grokResponse.usage?.totalTokens || 0,
+          escalationRequested: escalationDetection.escalationRequested,
+          escalationReason: escalationDetection.escalationReason,
         },
       };
 
@@ -228,7 +280,13 @@ export class EnhancedChatbotService {
     conversationHistory: ChatMessage[] = [],
     config: Partial<ChatbotConfig> = {}
   ): AsyncGenerator<
-    { content: string; isComplete: boolean; sources?: VectorSearchResult[] },
+    {
+      content: string;
+      isComplete: boolean;
+      sources?: VectorSearchResult[];
+      escalationRequested?: boolean;
+      escalationReason?: string;
+    },
     void,
     unknown
   > {
@@ -239,6 +297,7 @@ export class EnhancedChatbotService {
       temperature: 0.7,
       maxTokens: 1024,
       maxSources: 8,
+      minScore: 0.35, // Filter out low-relevance results (below 35% similarity)
       includeOrganizationDocs: true,
       includeContextBlocks: true,
       coreRules: {
@@ -283,6 +342,7 @@ export class EnhancedChatbotService {
         chatbot.organizationId,
         chatbotId,
         finalConfig.maxSources!,
+        finalConfig.minScore!,
         finalConfig.includeOrganizationDocs!,
         finalConfig.includeContextBlocks!
       );
@@ -309,15 +369,29 @@ export class EnhancedChatbotService {
       );
 
       // Step 5: Stream response with Groq
+      let accumulatedContent = "";
       for await (const chunk of grokClient.chatStream(grokMessages, {
         temperature: finalConfig.temperature,
         maxCompletionTokens: finalConfig.maxTokens,
       })) {
-        yield {
-          content: chunk.content,
-          isComplete: chunk.isComplete,
-          sources: chunk.isComplete ? relevantDocs : undefined,
-        };
+        accumulatedContent += chunk.content;
+
+        // On the final chunk, detect escalation and send metadata only (no content to avoid duplication)
+        if (chunk.isComplete) {
+          const escalationDetection = this.detectEscalation(accumulatedContent);
+          yield {
+            content: "", // Empty string - all content already streamed
+            isComplete: true,
+            sources: relevantDocs,
+            escalationRequested: escalationDetection.escalationRequested,
+            escalationReason: escalationDetection.escalationReason,
+          };
+        } else {
+          yield {
+            content: chunk.content,
+            isComplete: false,
+          };
+        }
       }
     } catch (error) {
       console.error("Error generating streaming response:", error);
@@ -337,6 +411,7 @@ export class EnhancedChatbotService {
     organizationId: string,
     chatbotId: string,
     maxResults: number,
+    minScore: number,
     includeOrganizationDocs: boolean,
     includeContextBlocks: boolean
   ): Promise<
@@ -397,8 +472,24 @@ export class EnhancedChatbotService {
         allResults.push(...contextResults);
       }
 
+      // Filter by minimum score threshold (removes low-relevance results)
+      const qualifyingResults = allResults.filter(
+        (result) => result.score >= minScore
+      );
+
+      // Log filtering stats for debugging
+      if (allResults.length > qualifyingResults.length) {
+        console.log(
+          `Filtered out ${
+            allResults.length - qualifyingResults.length
+          } low-relevance results (below ${minScore} threshold)`
+        );
+      }
+
       // Sort by score and limit results
-      return allResults.sort((a, b) => b.score - a.score).slice(0, maxResults);
+      return qualifyingResults
+        .sort((a, b) => b.score - a.score)
+        .slice(0, maxResults);
     } catch (error) {
       console.error("Error searching documents:", error);
       return [];
@@ -618,30 +709,12 @@ export class EnhancedChatbotService {
       return `No relevant documents found in the knowledge base for ${chatbotName}.`;
     }
 
-    const contextParts = documents.map((doc, index) => {
+    const contextParts = documents.map((doc) => {
       if (!doc.document) return "";
 
-      let sourceType: string;
-      switch (doc.type) {
-        case "organization_description":
-          sourceType = "Organization Information";
-          break;
-        case "organization":
-          sourceType = "Organization Document";
-          break;
-        case "context":
-          sourceType = "Chatbot Context";
-          break;
-        default:
-          sourceType = "Unknown Source";
-      }
-
-      return `${sourceType} ${index + 1} (Relevance: ${(
-        doc.score * 100
-      ).toFixed(1)}%):
-Title: ${doc.document.title}
-Type: ${doc.document.type}
-Content: ${doc.document.content.substring(0, 1000)}${
+      // Don't expose internal metadata - just provide the content
+      return `${doc.document.title}:
+${doc.document.content.substring(0, 1000)}${
         doc.document.content.length > 1000 ? "..." : ""
       }
 
@@ -665,33 +738,34 @@ Content: ${doc.document.content.substring(0, 1000)}${
 
     return `${basePrompt}
 
-You are ${chatbotName}, a specialized AI assistant. You have access to both organization-wide documents and chatbot-specific context to help answer questions.
+You are ${chatbotName}, a customer support representative. You represent the organization and should speak in first-person (using "we", "our", "us") when discussing company policies, products, or services.
 
 CORE CONVERSATION RULES:
 ${conversationRules}
 
 IMPORTANT INSTRUCTIONS:
-1. Use ONLY the information provided in the context below to answer questions
-2. If the context doesn't contain enough information to answer a question, clearly state that
-3. Be specific and cite relevant parts of the documents when possible
-4. If asked about something not in the knowledge base, politely explain that you don't have that information
-5. Keep responses concise but comprehensive
-6. Always be helpful and professional
-7. When citing sources, mention whether it's from organization documents or chatbot context
+1. Speak as a representative of the organization - use "we", "our", and "us" (not "the company" or third-person references)
+2. Keep responses CONCISE - aim for 3-4 sentences maximum unless more detail is specifically requested
+3. Use ONLY the information provided in the context below to answer questions
+4. If the context doesn't contain enough information, clearly state that and offer to help with something else
+5. Be direct and helpful - get to the point quickly
+6. If asked about something not in the knowledge base, briefly explain that you don't have that information
+7. Always be professional and friendly
 
 CONTEXT FROM KNOWLEDGE BASE:
 ${context}
 
-Remember: Only use information from the provided context. If you cannot answer based on the context, say so clearly.`;
+Remember: Speak AS the organization (first-person), keep responses brief, and only use information from the provided context.`;
   }
 
   /**
    * Build conversation rules from core rules configuration
    */
   private buildConversationRules(
-    coreRules?: ChatbotConfig["coreRules"]
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _coreRules?: ChatbotConfig["coreRules"]
   ): string {
-    // Static rules for quick testing - you can modify these directly
+    // Chatbot-specific rules
     const staticRules = [
       "• You are an AI chatbot designed to help users with their questions",
       "• Maintain a conversational, helpful, and professional tone",
@@ -703,7 +777,9 @@ Remember: Only use information from the provided context. If you cannot answer b
       "• Ask clarifying questions if the user's request is ambiguous",
     ];
 
-    return staticRules.join("\n");
+    // Combine global rules (always applied first) with chatbot-specific rules
+    const allRules = [...GLOBAL_CHATBOT_RULES, ...staticRules];
+    return allRules.join("\n");
 
     // Original dynamic rules code (commented out for static testing)
     /*

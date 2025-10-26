@@ -19,6 +19,7 @@ export async function POST(
       conversationHistory = [],
       stream = false,
       config = {},
+      chatId = null, // Optional chatId to continue existing conversation
     } = body;
 
     if (!message || typeof message !== "string") {
@@ -73,9 +74,37 @@ export async function POST(
       );
     }
 
+    // Get or create chat record
+    let chat;
+    if (chatId) {
+      chat = await prisma.chat.findUnique({
+        where: { id: chatId },
+        include: { messages: { orderBy: { createdAt: "asc" } } },
+      });
+      if (!chat) {
+        return NextResponse.json({ error: "Chat not found" }, { status: 404 });
+      }
+    } else {
+      // Create new chat for this embed conversation
+      chat = await prisma.chat.create({
+        data: {
+          title: `Embed Chat - ${new Date().toLocaleDateString()}`,
+          description: `Embedded chat with ${chatbot.name}`,
+          chatbotId: chatbot.id,
+          status: "ACTIVE",
+        },
+      });
+    }
+
     // Handle streaming response
     if (stream) {
-      return handleStreamingResponse(message, id, conversationHistory, config);
+      return handleStreamingResponse(
+        message,
+        id,
+        conversationHistory,
+        config,
+        chat.id
+      );
     }
 
     // Handle regular response
@@ -100,11 +129,39 @@ export async function POST(
         }
       );
 
+      // Save user message and assistant response to database
+      await prisma.message.createMany({
+        data: [
+          {
+            chatId: chat.id,
+            role: "USER",
+            content: message,
+            userId: null, // Embed chats are anonymous
+          },
+          {
+            chatId: chat.id,
+            role: "ASSISTANT",
+            content: response.message.content,
+            userId: null,
+            metadata: {
+              sources: response.sources,
+              tokensUsed: response.tokensUsed,
+              escalationRequested:
+                response.message.metadata?.escalationRequested,
+              escalationReason: response.message.metadata?.escalationReason,
+            },
+          },
+        ],
+      });
+
       return NextResponse.json({
         success: true,
         response: response.message.content,
         sources: response.sources,
         tokensUsed: response.tokensUsed,
+        escalationRequested: response.message.metadata?.escalationRequested,
+        escalationReason: response.message.metadata?.escalationReason,
+        chatId: chat.id, // Return chatId so frontend can track it
         chatbot: {
           id: chatbot.id,
           name: chatbot.name,
@@ -132,9 +189,16 @@ async function handleStreamingResponse(
   message: string,
   chatbotId: string,
   conversationHistory: ChatMessage[],
-  config: Partial<ChatbotConfig>
+  config: Partial<ChatbotConfig>,
+  chatId: string
 ) {
   const encoder = new TextEncoder();
+  let fullResponseContent = "";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let responseSources: any = [];
+  let responseEscalationRequested = false;
+  let responseEscalationReason: string | undefined;
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
@@ -147,10 +211,23 @@ async function handleStreamingResponse(
           );
 
         for await (const chunk of responseStream) {
+          // Accumulate the full response
+          fullResponseContent += chunk.content;
+          if (chunk.sources) {
+            responseSources = chunk.sources;
+          }
+          if (chunk.escalationRequested) {
+            responseEscalationRequested = chunk.escalationRequested;
+            responseEscalationReason = chunk.escalationReason;
+          }
+
           const data = {
             content: chunk.content,
             isComplete: chunk.isComplete,
             sources: chunk.sources,
+            escalationRequested: chunk.escalationRequested,
+            escalationReason: chunk.escalationReason,
+            chatId: chatId, // Include chatId in streaming response
           };
 
           controller.enqueue(
@@ -158,6 +235,33 @@ async function handleStreamingResponse(
           );
 
           if (chunk.isComplete) {
+            // Save messages to database after streaming completes
+            try {
+              await prisma.message.createMany({
+                data: [
+                  {
+                    chatId: chatId,
+                    role: "USER",
+                    content: message,
+                    userId: null,
+                  },
+                  {
+                    chatId: chatId,
+                    role: "ASSISTANT",
+                    content: fullResponseContent,
+                    userId: null,
+                    metadata: {
+                      sources: responseSources,
+                      escalationRequested: responseEscalationRequested,
+                      escalationReason: responseEscalationReason,
+                    },
+                  },
+                ],
+              });
+            } catch (dbError) {
+              console.error("Error saving messages to database:", dbError);
+            }
+
             controller.enqueue(encoder.encode("data: [DONE]\n\n"));
             controller.close();
           }

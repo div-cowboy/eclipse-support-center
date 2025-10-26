@@ -12,7 +12,6 @@ import {
 import { Badge } from "@/components/shadcn/ui/badge";
 import {
   Send,
-  User,
   MessageSquare,
   Clock,
   CheckCircle,
@@ -29,6 +28,14 @@ interface ChatMessage {
     priority?: "low" | "medium" | "high" | "urgent";
     assignedTo?: string;
   };
+}
+
+interface DatabaseMessage {
+  id: string;
+  role: string;
+  content: string;
+  createdAt: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface TraditionalChat {
@@ -68,7 +75,15 @@ export function TraditionalChatInterface({
           if (response.ok) {
             const data = await response.json();
             setChatInfo(data);
-            setMessages(data.messages || []);
+            // Map database message roles (uppercase) to frontend format (lowercase)
+            const mappedMessages = (data.messages || []).map(
+              (msg: DatabaseMessage) => ({
+                ...msg,
+                role: msg.role.toLowerCase() as "user" | "assistant" | "system",
+                timestamp: new Date(msg.createdAt),
+              })
+            );
+            setMessages(mappedMessages);
           }
         } catch (error) {
           console.error("Error loading chat info:", error);
@@ -234,68 +249,79 @@ export function TraditionalChatInterface({
                 message.role === "user" ? "justify-end" : "justify-start"
               }`}
             >
-              {message.role === "assistant" && (
+              {/* Left Avatar for Assistant/System messages */}
+              {(message.role === "assistant" || message.role === "system") && (
                 <div className="flex-shrink-0">
-                  <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center">
-                    <MessageSquare className="h-4 w-4 text-blue-600" />
+                  <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                    <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                      CS
+                    </span>
                   </div>
                 </div>
               )}
 
-              <div
-                className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                  message.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : message.role === "system"
-                    ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
-                    : "bg-muted"
-                }`}
-              >
-                <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+              <div className="flex flex-col gap-1 max-w-[70%]">
+                {/* Sender Label */}
+                <span className="text-xs text-muted-foreground px-1">
+                  {message.role === "user"
+                    ? "User"
+                    : message.role === "assistant"
+                    ? "Customer Support"
+                    : "System"}
+                </span>
 
-                {/* Message metadata */}
-                {message.metadata && (
-                  <div className="flex items-center gap-2 mt-2 text-xs">
-                    {message.metadata.status && (
-                      <div className="flex items-center gap-1">
-                        {getStatusIcon(message.metadata.status)}
-                        <span className="capitalize">
-                          {message.metadata.status}
+                <div
+                  className={`rounded-lg px-4 py-2 ${
+                    message.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : message.role === "system"
+                      ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
+                      : "bg-muted"
+                  }`}
+                >
+                  <p className="text-sm whitespace-pre-wrap">
+                    {message.content}
+                  </p>
+
+                  {/* Message metadata */}
+                  {message.metadata && (
+                    <div className="flex items-center gap-2 mt-2 text-xs">
+                      {message.metadata.status && (
+                        <div className="flex items-center gap-1">
+                          {getStatusIcon(message.metadata.status)}
+                          <span className="capitalize">
+                            {message.metadata.status}
+                          </span>
+                        </div>
+                      )}
+                      {message.metadata.priority && (
+                        <Badge variant="outline" className="text-xs">
+                          {message.metadata.priority}
+                        </Badge>
+                      )}
+                      {message.metadata.assignedTo && (
+                        <span className="text-muted-foreground">
+                          Assigned to: {message.metadata.assignedTo}
                         </span>
-                      </div>
-                    )}
-                    {message.metadata.priority && (
-                      <Badge variant="outline" className="text-xs">
-                        {message.metadata.priority}
-                      </Badge>
-                    )}
-                    {message.metadata.assignedTo && (
-                      <span className="text-muted-foreground">
-                        Assigned to: {message.metadata.assignedTo}
-                      </span>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </div>
+                  )}
 
-                <p className="text-xs text-muted-foreground mt-1">
-                  {message.timestamp
-                    ? message.timestamp.toLocaleTimeString()
-                    : new Date().toLocaleTimeString()}
-                </p>
+                  <p className="text-xs opacity-70 mt-1">
+                    {message.timestamp
+                      ? message.timestamp.toLocaleTimeString()
+                      : new Date().toLocaleTimeString()}
+                  </p>
+                </div>
               </div>
 
+              {/* Right Avatar for User messages */}
               {message.role === "user" && (
                 <div className="flex-shrink-0">
-                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                    <User className="h-4 w-4 text-primary-foreground" />
-                  </div>
-                </div>
-              )}
-
-              {message.role === "system" && (
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center">
-                    <AlertCircle className="h-4 w-4 text-orange-600" />
+                  <div className="w-10 h-10 rounded-full bg-black dark:bg-white flex items-center justify-center">
+                    <span className="text-sm font-semibold text-white dark:text-black">
+                      U
+                    </span>
                   </div>
                 </div>
               )}

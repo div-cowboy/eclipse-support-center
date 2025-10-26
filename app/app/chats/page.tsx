@@ -21,6 +21,8 @@ import {
   CheckCircle,
   AlertCircle,
   MoreHorizontal,
+  Bot,
+  Building2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -40,6 +42,14 @@ interface TraditionalChat {
   updatedAt: Date;
   _count: {
     messages: number;
+  };
+  chatbot?: {
+    id: string;
+    name: string;
+    organization: {
+      id: string;
+      name: string;
+    };
   };
 }
 
@@ -128,7 +138,8 @@ export default function ChatsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Support Chats</h1>
           <p className="text-muted-foreground">
-            Manage customer support conversations and inquiries.
+            Manage all customer conversations including embedded chatbot
+            interactions and direct support inquiries.
           </p>
         </div>
         <Button onClick={handleCreateNewChat}>
@@ -168,8 +179,10 @@ export default function ChatsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Title</TableHead>
+                  <TableHead>Organization</TableHead>
                   <TableHead>Messages</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Last Updated</TableHead>
@@ -183,6 +196,25 @@ export default function ChatsPage() {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => handleViewChat(chat.id)}
                   >
+                    <TableCell>
+                      {chat.chatbot ? (
+                        <Badge
+                          variant="outline"
+                          className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800"
+                        >
+                          <Bot className="h-3 w-3 mr-1" />
+                          Embedded
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="text-xs bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800"
+                        >
+                          <MessageSquare className="h-3 w-3 mr-1" />
+                          Direct
+                        </Badge>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {getStatusIcon(chat.status)}
@@ -202,7 +234,23 @@ export default function ChatsPage() {
                             {chat.description}
                           </div>
                         )}
+                        {chat.chatbot && (
+                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                            <Bot className="h-3 w-3" />
+                            {chat.chatbot.name}
+                          </div>
+                        )}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {chat.chatbot?.organization ? (
+                        <Badge variant="secondary" className="text-xs">
+                          <Building2 className="h-3 w-3 mr-1" />
+                          {chat.chatbot.organization.name}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="text-xs">

@@ -122,6 +122,8 @@ export async function POST(
         response: response.message.content,
         sources: response.sources,
         tokensUsed: response.tokensUsed,
+        escalationRequested: response.message.metadata?.escalationRequested,
+        escalationReason: response.message.metadata?.escalationReason,
         chatbot: {
           id: chatbot.id,
           name: chatbot.name,
@@ -168,6 +170,8 @@ async function handleStreamingResponse(
             content: chunk.content,
             isComplete: chunk.isComplete,
             sources: chunk.sources,
+            escalationRequested: chunk.escalationRequested,
+            escalationReason: chunk.escalationReason,
           };
 
           controller.enqueue(

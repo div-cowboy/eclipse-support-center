@@ -5,7 +5,7 @@ export default function Home() {
   return (
     <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
       <SignIn />
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
+      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start max-w-6xl w-full">
         <Image
           className="dark:invert"
           src="/next.svg"
@@ -51,6 +51,83 @@ export default function Home() {
           >
             Read our docs
           </a>
+        </div>
+
+        {/* Embedded Chat Widget Demo */}
+        <div className="w-full mt-12 border rounded-lg p-6 bg-card">
+          <h2 className="text-2xl font-bold mb-4">Eclipse Chat Widget Demo</h2>
+          <p className="text-muted-foreground mb-6">
+            This is an example of how you can embed the Eclipse Support Center
+            chat widget on any website using an iframe. Replace the chatbot ID
+            in the URL to use your own chatbot.
+          </p>
+
+          <div className="bg-muted/30 p-4 rounded-lg mb-6">
+            <p className="text-sm font-semibold mb-2">Basic iframe example:</p>
+            <code className="text-sm block overflow-x-auto">
+              {`<iframe src="/embed/chat?chatbotId=YOUR_CHATBOT_ID" width="400" height="600" frameborder="0"></iframe>`}
+            </code>
+          </div>
+
+          <div className="bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-6">
+            <h3 className="font-semibold text-sm mb-2">✅ Live Demo Ready</h3>
+            <p className="text-sm text-muted-foreground mb-2">
+              This iframe is connected to a real chatbot. Try asking it
+              questions!
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Chatbot ID:{" "}
+              <code className="bg-black/5 dark:bg-white/5 px-1 py-0.5 rounded">
+                cmgzje3c4000am64yeow24kpi
+              </code>
+            </p>
+          </div>
+
+          <div className="flex justify-center">
+            <iframe
+              src="/embed/chat?chatbotId=cmgzje3c4000am64yeow24kpi&theme=light&welcomeMessage=Welcome%20to%20Eclipse%20Support%20Center!&placeholder=Ask%20me%20anything..."
+              width="400"
+              height="600"
+              className="border rounded-lg shadow-lg"
+              title="Eclipse Chat Widget Demo"
+            />
+          </div>
+
+          <div className="mt-6 space-y-2">
+            <h3 className="font-semibold text-sm">Customization Options:</h3>
+            <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
+              <li>
+                <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  chatbotId
+                </code>{" "}
+                - Your chatbot&apos;s unique ID
+              </li>
+              <li>
+                <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  theme
+                </code>{" "}
+                - light, dark, or auto
+              </li>
+              <li>
+                <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  welcomeMessage
+                </code>{" "}
+                - Custom greeting
+              </li>
+              <li>
+                <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  primaryColor
+                </code>{" "}
+                - Brand color (hex)
+              </li>
+              <li>
+                <code className="text-xs bg-muted px-1 py-0.5 rounded">
+                  showBranding
+                </code>{" "}
+                - Show/hide organization badge
+              </li>
+            </ul>
+          </div>
         </div>
       </main>
       <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">

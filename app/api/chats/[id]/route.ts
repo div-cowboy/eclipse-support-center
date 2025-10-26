@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
 
-// GET /api/chats/[id] - Get a specific traditional chat with messages
+// GET /api/chats/[id] - Get a specific chat with messages (traditional or embedded)
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -14,9 +14,16 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user from database
+    // Get user from database with their organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
+      include: {
+        organizations: {
+          select: {
+            id: true,
+          },
+        },
+      },
     });
 
     if (!user) {
@@ -26,7 +33,6 @@ export async function GET(
     const chat = await prisma.chat.findUnique({
       where: {
         id: id,
-        chatbotId: null, // Ensure it's a traditional chat
       },
       include: {
         messages: {
@@ -39,11 +45,35 @@ export async function GET(
             messages: true,
           },
         },
+        chatbot: {
+          include: {
+            organization: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+              },
+            },
+          },
+        },
       },
     });
 
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
+    }
+
+    // Verify access: chat belongs to user's organization (for embedded) or is traditional (no chatbot)
+    const organizationIds = user.organizations.map((org) => org.id);
+    const hasAccess =
+      !chat.chatbot || // Traditional chat
+      organizationIds.includes(chat.chatbot.organizationId); // Embedded chat from user's org
+
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: "Access denied to this chat" },
+        { status: 403 }
+      );
     }
 
     return NextResponse.json(chat);
@@ -71,15 +101,49 @@ export async function PUT(
     const body = await request.json();
     const { status, title, description } = body;
 
+    // Get user with organizations for access control
+    const user = await prisma.user.findUnique({
+      where: { email: session.user.email },
+      include: {
+        organizations: {
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
     const chat = await prisma.chat.findUnique({
       where: {
         id: id,
-        chatbotId: null, // Ensure it's a traditional chat
+      },
+      include: {
+        chatbot: {
+          select: {
+            organizationId: true,
+          },
+        },
       },
     });
 
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
+    }
+
+    // Verify access
+    const organizationIds = user.organizations.map((org) => org.id);
+    const hasAccess =
+      !chat.chatbot || organizationIds.includes(chat.chatbot.organizationId);
+
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: "Access denied to this chat" },
+        { status: 403 }
+      );
     }
 
     const updatedChat = await prisma.chat.update({
@@ -101,6 +165,17 @@ export async function PUT(
             messages: true,
           },
         },
+        chatbot: {
+          include: {
+            organization: {
+              select: {
+                id: true,
+                name: true,
+                slug: true,
+              },
+            },
+          },
+        },
       },
     });
 
@@ -114,7 +189,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/chats/[id] - Delete a traditional chat
+// DELETE /api/chats/[id] - Delete a chat (traditional or embedded)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -126,9 +201,16 @@ export async function DELETE(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get user from database
+    // Get user from database with organizations
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
+      include: {
+        organizations: {
+          select: {
+            id: true,
+          },
+        },
+      },
     });
 
     if (!user) {
@@ -138,12 +220,30 @@ export async function DELETE(
     const chat = await prisma.chat.findUnique({
       where: {
         id: id,
-        chatbotId: null, // Ensure it's a traditional chat
+      },
+      include: {
+        chatbot: {
+          select: {
+            organizationId: true,
+          },
+        },
       },
     });
 
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
+    }
+
+    // Verify access
+    const organizationIds = user.organizations.map((org) => org.id);
+    const hasAccess =
+      !chat.chatbot || organizationIds.includes(chat.chatbot.organizationId);
+
+    if (!hasAccess) {
+      return NextResponse.json(
+        { error: "Access denied to this chat" },
+        { status: 403 }
+      );
     }
 
     // Soft delete by updating status

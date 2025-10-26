@@ -19,6 +19,8 @@ import {
   Bug,
   Eye,
   EyeOff,
+  AlertCircle,
+  PhoneCall,
 } from "lucide-react";
 
 interface ChatMessage {
@@ -36,6 +38,8 @@ interface ChatMessage {
     }>;
     tokensUsed?: number;
     rawResponse?: Record<string, unknown>; // Store the raw API response for debugging
+    escalationRequested?: boolean;
+    escalationReason?: string;
   };
 }
 
@@ -53,6 +57,9 @@ export function ChatbotChatInterface({
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [escalationRequested, setEscalationRequested] = useState(false);
+  const [escalationReason, setEscalationReason] = useState<string>("");
+  const [escalationActivated, setEscalationActivated] = useState(false);
   const [chatbotInfo, setChatbotInfo] = useState<{
     id: string;
     name: string;
@@ -155,6 +162,7 @@ export function ChatbotChatInterface({
 
         if (reader) {
           let assistantMessage: ChatMessage | null = null;
+          let fullContent = "";
 
           while (true) {
             const { done, value } = await reader.read();
@@ -170,6 +178,7 @@ export function ChatbotChatInterface({
                   setIsStreaming(false);
                   setStreamingContent("");
                   if (assistantMessage) {
+                    assistantMessage.content = fullContent;
                     setMessages((prev) => [...prev, assistantMessage!]);
                   }
                   break;
@@ -179,6 +188,7 @@ export function ChatbotChatInterface({
                   const parsed = JSON.parse(data);
                   if (parsed.content) {
                     setStreamingContent((prev) => prev + parsed.content);
+                    fullContent += parsed.content;
 
                     if (!assistantMessage) {
                       assistantMessage = {
@@ -188,8 +198,19 @@ export function ChatbotChatInterface({
                         timestamp: new Date(),
                         metadata: {
                           sources: parsed.sources || [],
+                          escalationRequested: parsed.escalationRequested,
+                          escalationReason: parsed.escalationReason,
                         },
                       };
+                    }
+
+                    // Check for escalation in final chunk
+                    if (parsed.isComplete && parsed.escalationRequested) {
+                      setEscalationRequested(true);
+                      setEscalationReason(
+                        parsed.escalationReason ||
+                          "User requested human assistance"
+                      );
                     }
                   }
                 } catch {
@@ -213,9 +234,19 @@ export function ChatbotChatInterface({
               sources: data.sources,
               tokensUsed: data.tokensUsed,
               rawResponse: data, // Store the complete raw response for debugging
+              escalationRequested: data.escalationRequested,
+              escalationReason: data.escalationReason,
             },
           };
           setMessages((prev) => [...prev, assistantMessage]);
+
+          // Check for escalation
+          if (data.escalationRequested) {
+            setEscalationRequested(true);
+            setEscalationReason(
+              data.escalationReason || "User requested human assistance"
+            );
+          }
         } else {
           throw new Error(data.error || "Failed to get response");
         }
@@ -261,13 +292,74 @@ export function ChatbotChatInterface({
     return type === "organization" ? "Org Doc" : "Context";
   };
 
+  const handleConnectSupport = async () => {
+    // Activate escalation mode
+    setEscalationActivated(true);
+    setEscalationRequested(false); // Hide the initial button
+
+    // Add handoff message
+    const handoffMessage: ChatMessage = {
+      id: `system_${Date.now()}`,
+      role: "assistant",
+      content: "🔄 Transferring you to a customer support representative...",
+      timestamp: new Date(),
+      metadata: {
+        escalationRequested: true,
+      },
+    };
+    setMessages((prev) => [...prev, handoffMessage]);
+
+    // Send escalation notification to backend
+    try {
+      await fetch("/api/escalations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatbotId,
+          reason: escalationReason,
+          messages: messages,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+    } catch (error) {
+      console.error("Error logging escalation:", error);
+    }
+
+    // Simulate connection delay, then send support greeting
+    setTimeout(() => {
+      const supportGreeting: ChatMessage = {
+        id: `support_${Date.now()}`,
+        role: "assistant",
+        content:
+          "👋 Hi! I'm a customer support representative. I've reviewed your conversation. What can I help you with today?",
+        timestamp: new Date(),
+        metadata: {
+          escalationRequested: false,
+        },
+      };
+      setMessages((prev) => [...prev, supportGreeting]);
+    }, 1500);
+  };
+
   return (
     <Card className={`h-[600px] flex flex-col ${className}`}>
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2">
-          <Bot className="h-5 w-5" />
-          {chatbotInfo?.name || "Chatbot"}
-          {chatbotInfo && (
+          {escalationActivated ? (
+            <>
+              <User className="h-5 w-5 text-green-600" />
+              <span>Customer Support</span>
+              <Badge variant="default" className="ml-2 bg-green-600 text-xs">
+                Live
+              </Badge>
+            </>
+          ) : (
+            <>
+              <Bot className="h-5 w-5" />
+              {chatbotInfo?.name || "Chatbot"}
+            </>
+          )}
+          {chatbotInfo && !escalationActivated && (
             <div className="flex gap-2 ml-auto">
               <Button
                 variant="outline"
@@ -416,13 +508,45 @@ export function ChatbotChatInterface({
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Escalation Button */}
+        {escalationRequested && (
+          <div className="border-t border-b bg-blue-50 dark:bg-blue-950 p-4">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                  Would you like to speak with a human representative?
+                </p>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
+                  {escalationReason ||
+                    "We're here to help you connect with our support team."}
+                </p>
+                <Button
+                  onClick={handleConnectSupport}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                  size="sm"
+                >
+                  <PhoneCall className="h-4 w-4 mr-2" />
+                  Connect with Customer Support
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Input */}
         <div className="border-t p-4">
           <form onSubmit={handleSubmit} className="flex gap-2">
             <Input
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Ask a question..."
+              placeholder={
+                escalationActivated
+                  ? "Message customer support..."
+                  : "Ask a question..."
+              }
               disabled={isLoading}
               className="flex-1"
             />

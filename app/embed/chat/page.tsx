@@ -11,7 +11,15 @@ import {
   CardTitle,
 } from "@/components/shadcn/ui/card";
 import { Badge } from "@/components/shadcn/ui/badge";
-import { Send, Bot, User, MessageSquare, Building2 } from "lucide-react";
+import {
+  Send,
+  Bot,
+  User,
+  MessageSquare,
+  Building2,
+  AlertCircle,
+  PhoneCall,
+} from "lucide-react";
 
 interface ChatMessage {
   id: string;
@@ -27,6 +35,8 @@ interface ChatMessage {
       type: "organization_description" | "organization" | "context";
     }>;
     tokensUsed?: number;
+    escalationRequested?: boolean;
+    escalationReason?: string;
   };
 }
 
@@ -41,6 +51,9 @@ interface EmbedConfig {
   showBranding?: boolean;
   welcomeMessage?: string;
   placeholder?: string;
+  customCSS?: string;
+  fontFamily?: string;
+  fontSize?: string;
 }
 
 // Component that uses useSearchParams - needs to be wrapped in Suspense
@@ -51,6 +64,10 @@ function EmbedChatContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [escalationRequested, setEscalationRequested] = useState(false);
+  const [escalationReason, setEscalationReason] = useState<string>("");
+  const [escalationActivated, setEscalationActivated] = useState(false);
+  const [chatId, setChatId] = useState<string | null>(null);
   const [chatbotInfo, setChatbotInfo] = useState<{
     id: string;
     name: string;
@@ -75,6 +92,9 @@ function EmbedChatContent() {
     showBranding: searchParams.get("showBranding") !== "false",
     welcomeMessage: searchParams.get("welcomeMessage") || undefined,
     placeholder: searchParams.get("placeholder") || "Type your message...",
+    customCSS: searchParams.get("customCSS") || undefined,
+    fontFamily: searchParams.get("fontFamily") || undefined,
+    fontSize: searchParams.get("fontSize") || undefined,
   };
 
   // Load chatbot info on mount
@@ -151,6 +171,7 @@ function EmbedChatContent() {
             message,
             conversationHistory,
             stream: true,
+            chatId: chatId, // Include chatId to continue conversation
           }),
         }
       );
@@ -191,6 +212,12 @@ function EmbedChatContent() {
 
             try {
               const parsed = JSON.parse(data);
+
+              // Capture chatId from first response
+              if (parsed.chatId && !chatId) {
+                setChatId(parsed.chatId);
+              }
+
               if (parsed.content) {
                 assistantMessage.content += parsed.content;
                 setStreamingContent(assistantMessage.content);
@@ -206,6 +233,18 @@ function EmbedChatContent() {
                   ...assistantMessage.metadata,
                   tokensUsed: parsed.tokensUsed,
                 };
+              }
+              // Check for escalation in the response
+              if (parsed.escalationRequested) {
+                assistantMessage.metadata = {
+                  ...assistantMessage.metadata,
+                  escalationRequested: parsed.escalationRequested,
+                  escalationReason: parsed.escalationReason,
+                };
+                setEscalationRequested(true);
+                setEscalationReason(
+                  parsed.escalationReason || "User requested human assistance"
+                );
               }
             } catch (e) {
               console.error("Error parsing streaming data:", e);
@@ -234,11 +273,64 @@ function EmbedChatContent() {
     sendMessage(inputMessage);
   };
 
+  const handleConnectSupport = async () => {
+    // Activate escalation mode
+    setEscalationActivated(true);
+    setEscalationRequested(false); // Hide the initial button
+
+    // Add handoff message
+    const handoffMessage: ChatMessage = {
+      id: `system_${Date.now()}`,
+      role: "assistant",
+      content: "🔄 Transferring you to a customer support representative...",
+      timestamp: new Date(),
+      metadata: {
+        escalationRequested: true,
+      },
+    };
+    setMessages((prev) => [...prev, handoffMessage]);
+
+    // Log escalation to backend
+    try {
+      await fetch("/api/escalations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatbotId: config.chatbotId,
+          chatId: chatId,
+          reason: escalationReason,
+          messages: messages,
+          timestamp: new Date().toISOString(),
+          isEmbedded: true,
+        }),
+      });
+    } catch (error) {
+      console.error("Error logging escalation:", error);
+    }
+
+    // Simulate connection delay, then send support greeting
+    setTimeout(() => {
+      const supportGreeting: ChatMessage = {
+        id: `support_${Date.now()}`,
+        role: "assistant",
+        content:
+          "👋 Hi! I'm a customer support representative. I've reviewed your conversation. What can I help you with today?",
+        timestamp: new Date(),
+        metadata: {
+          escalationRequested: false,
+        },
+      };
+      setMessages((prev) => [...prev, supportGreeting]);
+    }, 1500);
+  };
+
   // Apply custom styling based on configuration
   const containerStyle: React.CSSProperties = {
     height: config.height,
     width: config.width,
     borderRadius: config.borderRadius,
+    ...(config.fontFamily && { fontFamily: config.fontFamily }),
+    ...(config.fontSize && { fontSize: config.fontSize }),
     ...(config.primaryColor && {
       "--primary": config.primaryColor,
       "--primary-foreground": "#ffffff",
@@ -246,122 +338,198 @@ function EmbedChatContent() {
   };
 
   return (
-    <div className="h-screen w-full bg-background" style={containerStyle}>
-      <Card className="h-full flex flex-col border-0 shadow-none">
-        <CardHeader className="pb-3 border-b">
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Bot className="h-5 w-5" />
-            {chatbotInfo?.name || "AI Assistant"}
-            {config.showBranding && chatbotInfo?.organization && (
-              <div className="flex gap-2 ml-auto">
-                <Badge variant="outline" className="text-xs">
-                  <Building2 className="h-3 w-3 mr-1" />
-                  {chatbotInfo.organization.name}
-                </Badge>
-              </div>
-            )}
-          </CardTitle>
-          {chatbotInfo?.description && (
-            <p className="text-sm text-muted-foreground">
-              {chatbotInfo.description}
-            </p>
-          )}
-        </CardHeader>
-
-        <CardContent className="flex-1 flex flex-col p-0">
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 && !chatbotInfo && (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">Loading chat...</h3>
-                <p className="text-muted-foreground max-w-sm">
-                  Please wait while we set up your conversation.
-                </p>
-              </div>
-            )}
-
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex gap-3 ${
-                  message.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                {message.role === "assistant" && (
-                  <div className="flex-shrink-0">
-                    <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                      <Bot className="h-4 w-4 text-primary-foreground" />
-                    </div>
+    <>
+      {/* Custom CSS injection */}
+      {config.customCSS && (
+        <style
+          dangerouslySetInnerHTML={{
+            __html: decodeURIComponent(config.customCSS),
+          }}
+        />
+      )}
+      <div className="h-screen w-full bg-background" style={containerStyle}>
+        <Card className="h-full flex flex-col border-0 shadow-none">
+          <CardHeader className="pb-3 border-b">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              {escalationActivated ? (
+                <>
+                  <User className="h-5 w-5 text-green-600" />
+                  <span>Customer Support</span>
+                  <Badge
+                    variant="default"
+                    className="ml-2 bg-green-600 text-xs"
+                  >
+                    Live
+                  </Badge>
+                </>
+              ) : (
+                <>
+                  <Bot className="h-5 w-5" />
+                  {chatbotInfo?.name || "AI Assistant"}
+                </>
+              )}
+              {config.showBranding &&
+                chatbotInfo?.organization &&
+                !escalationActivated && (
+                  <div className="flex gap-2 ml-auto">
+                    <Badge variant="outline" className="text-xs">
+                      <Building2 className="h-3 w-3 mr-1" />
+                      {chatbotInfo.organization.name}
+                    </Badge>
                   </div>
                 )}
+            </CardTitle>
+            {chatbotInfo?.description && (
+              <p className="text-sm text-muted-foreground">
+                {chatbotInfo.description}
+              </p>
+            )}
+          </CardHeader>
 
+          <CardContent className="flex-1 flex flex-col p-0">
+            {/* Messages */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {messages.length === 0 && !chatbotInfo && (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    Loading chat...
+                  </h3>
+                  <p className="text-muted-foreground max-w-sm">
+                    Please wait while we set up your conversation.
+                  </p>
+                </div>
+              )}
+
+              {messages.map((message) => (
                 <div
-                  className={`max-w-[80%] rounded-lg px-3 py-2 ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted"
+                  key={message.id}
+                  className={`flex gap-3 ${
+                    message.role === "user" ? "justify-end" : "justify-start"
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">
-                    {message.content}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {message.timestamp.toLocaleTimeString()}
-                  </p>
-                </div>
+                  {message.role === "assistant" && (
+                    <div className="flex-shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                        <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                          CS
+                        </span>
+                      </div>
+                    </div>
+                  )}
 
-                {message.role === "user" && (
+                  <div
+                    className={`max-w-[80%] rounded-lg px-3 py-2 ${
+                      message.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted"
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">
+                      {message.content}
+                    </p>
+                    <p className="text-xs opacity-70 mt-1">
+                      {message.timestamp.toLocaleTimeString()}
+                    </p>
+                  </div>
+
+                  {message.role === "user" && (
+                    <div className="flex-shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-black dark:bg-white flex items-center justify-center">
+                        <span className="text-xs font-semibold text-white dark:text-black">
+                          U
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Streaming message */}
+              {isStreaming && streamingContent && (
+                <div className="flex gap-3 justify-start">
                   <div className="flex-shrink-0">
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                      <User className="h-4 w-4 text-muted-foreground" />
+                    <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                        CS
+                      </span>
                     </div>
                   </div>
-                )}
-              </div>
-            ))}
-
-            {/* Streaming message */}
-            {isStreaming && streamingContent && (
-              <div className="flex gap-3 justify-start">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                    <Bot className="h-4 w-4 text-primary-foreground" />
+                  <div className="max-w-[80%] rounded-lg px-3 py-2 bg-muted">
+                    <p className="text-sm whitespace-pre-wrap">
+                      {streamingContent}
+                      <span className="animate-pulse">|</span>
+                    </p>
                   </div>
                 </div>
-                <div className="max-w-[80%] rounded-lg px-3 py-2 bg-muted">
-                  <p className="text-sm whitespace-pre-wrap">
-                    {streamingContent}
-                    <span className="animate-pulse">|</span>
-                  </p>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+
+            {/* Escalation Button */}
+            {escalationRequested && (
+              <div className="border-t border-b bg-blue-50 dark:bg-blue-950 p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0">
+                    <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                      Would you like to speak with a human representative?
+                    </p>
+                    <p className="text-xs text-blue-700 dark:text-blue-300 mb-3">
+                      {escalationReason ||
+                        "We're here to help you connect with our support team."}
+                    </p>
+                    <Button
+                      onClick={handleConnectSupport}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                      size="sm"
+                    >
+                      <PhoneCall className="h-4 w-4 mr-2" />
+                      Connect with Customer Support
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
 
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input */}
-          <div className="border-t p-4">
-            <form onSubmit={handleSubmit} className="flex gap-2">
-              <Input
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                placeholder={config.placeholder}
-                disabled={isLoading}
-                className="flex-1"
-              />
-              <Button
-                type="submit"
-                disabled={isLoading || !inputMessage.trim()}
-              >
-                <Send className="h-4 w-4" />
-              </Button>
-            </form>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+            {/* Input */}
+            <div className="border-t p-4">
+              <form onSubmit={handleSubmit} className="flex gap-2">
+                <Input
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  placeholder={
+                    escalationActivated
+                      ? "Message customer support..."
+                      : config.placeholder
+                  }
+                  disabled={isLoading}
+                  className="flex-1"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck="false"
+                  name="chat-message"
+                  type="text"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-form-type="other"
+                />
+                <Button
+                  type="submit"
+                  disabled={isLoading || !inputMessage.trim()}
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </form>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    </>
   );
 }
 

@@ -144,8 +144,27 @@ export class ChromaVectorDB implements VectorDatabase {
 
 // Embedding generation utilities
 export class EmbeddingService {
+  /**
+   * Normalize text before generating embeddings
+   * This ensures consistent embedding quality by standardizing the input
+   */
+  private static normalizeText(text: string): string {
+    return (
+      text
+        // Replace newlines with spaces (embeddings don't benefit from newlines)
+        .replace(/\n/g, " ")
+        // Replace multiple spaces with single space
+        .replace(/\s{2,}/g, " ")
+        // Trim whitespace from start and end
+        .trim()
+    );
+  }
+
   // This would integrate with OpenAI, Cohere, or other embedding services
   static async generateEmbedding(text: string): Promise<number[]> {
+    // Normalize text before embedding
+    const normalizedText = this.normalizeText(text);
+
     // Check if OpenAI is configured
     if (process.env.OPENAI_API_KEY) {
       try {
@@ -155,7 +174,7 @@ export class EmbeddingService {
         const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
         const response = await openai.embeddings.create({
           model: "text-embedding-3-small",
-          input: text,
+          input: normalizedText,
         });
         return response.data[0].embedding;
       } catch (error) {
@@ -353,6 +372,7 @@ export class OrganizationDocumentVectorService {
         type,
         chatbotId: "", // Not applicable for org documents
         contextBlockId: documentId,
+        organizationId: organizationId,
       },
     };
 

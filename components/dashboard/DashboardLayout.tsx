@@ -22,10 +22,12 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
 
         {/* Content area with sidebar */}
         <div className="flex h-full overflow-hidden">
-          <DashboardSidebar />
+          <div className="w-[250px] max-w-[250px]">
+            <DashboardSidebar className="w-full max-w-[250px]" />
+          </div>
 
-          <main className="flex-1 overflow-auto p-6">
-            <div className="mx-auto max-w-7xl">{children}</div>
+          <main className="w-[calc(100%-350px)] overflow-auto p-10 ">
+            <div className="mx-auto max-w-8xl">{children}</div>
           </main>
         </div>
       </div>
