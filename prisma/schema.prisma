@@ -20,6 +20,7 @@ model User {
   sessions          Session[]
   organizations     Organization[]         @relation("OrganizationMembers")
   uploadedDocuments OrganizationDocument[]
+  assignedChats     Chat[]                 @relation("AssignedChats")
 }
 
 model Organization {
@@ -127,19 +128,27 @@ model VerificationToken {
 }
 
 model Chat {
-  id          String     @id @default(cuid())
-  title       String
-  description String?
-  status      ChatStatus @default(ACTIVE)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  chatbotId   String?
-  chatbot     Chatbot?   @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
-  messages    Message[]
+  id                    String     @id @default(cuid())
+  title                 String
+  description           String?
+  status                ChatStatus @default(ACTIVE)
+  escalationRequested   Boolean    @default(false)
+  escalationReason      String?
+  escalationRequestedAt DateTime?
+  assignedToId          String?
+  assignedAt            DateTime?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  chatbotId             String?
+  chatbot               Chatbot?   @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
+  messages              Message[]
+  assignedTo            User?      @relation("AssignedChats", fields: [assignedToId], references: [id])
 
   @@index([chatbotId])
   @@index([status])
   @@index([createdAt])
+  @@index([escalationRequested])
+  @@index([assignedToId])
 }
 
 model Message {
@@ -167,6 +176,7 @@ enum ChatStatus {
 enum MessageRole {
   USER
   ASSISTANT
+  AGENT
   SYSTEM
 }
 

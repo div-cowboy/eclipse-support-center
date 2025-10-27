@@ -103,10 +103,11 @@ function ChatbotAccordionItem({
     }
   };
 
-  const formatDate = (date: Date) => {
+  const formatDate = (date: Date | string) => {
     const now = new Date();
+    const dateObj = date instanceof Date ? date : new Date(date);
     const diffInHours = Math.floor(
-      (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+      (now.getTime() - dateObj.getTime()) / (1000 * 60 * 60)
     );
 
     if (diffInHours < 1) {

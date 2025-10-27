@@ -23,6 +23,8 @@ import {
   MoreHorizontal,
   Bot,
   Building2,
+  PhoneCall,
+  UserCheck,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -38,6 +40,11 @@ interface TraditionalChat {
   title: string;
   description?: string;
   status: "ACTIVE" | "ARCHIVED" | "DELETED";
+  escalationRequested: boolean;
+  escalationReason?: string;
+  escalationRequestedAt?: Date;
+  assignedToId?: string;
+  assignedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   _count: {
@@ -50,6 +57,11 @@ interface TraditionalChat {
       id: string;
       name: string;
     };
+  };
+  assignedTo?: {
+    id: string;
+    name: string | null;
+    email: string;
   };
 }
 
@@ -105,13 +117,14 @@ export default function ChatsPage() {
   };
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    // Use ISO format to avoid hydration mismatches between server and client
+    const d = new Date(date);
+    const month = d.toLocaleString("en-US", { month: "short" });
+    const day = d.getDate();
+    const year = d.getFullYear();
+    const hours = d.getHours().toString().padStart(2, "0");
+    const minutes = d.getMinutes().toString().padStart(2, "0");
+    return `${month} ${day}, ${year} ${hours}:${minutes}`;
   };
 
   const handleViewChat = (chatId: string) => {
@@ -179,10 +192,11 @@ export default function ChatsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead>Title</TableHead>
                   <TableHead>Organization</TableHead>
+                  <TableHead>Escalation</TableHead>
+                  <TableHead>Assigned To</TableHead>
                   <TableHead>Messages</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Last Updated</TableHead>
@@ -197,25 +211,6 @@ export default function ChatsPage() {
                     onClick={() => handleViewChat(chat.id)}
                   >
                     <TableCell>
-                      {chat.chatbot ? (
-                        <Badge
-                          variant="outline"
-                          className="text-xs bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800"
-                        >
-                          <Bot className="h-3 w-3 mr-1" />
-                          Embedded
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className="text-xs bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950 dark:text-purple-300 dark:border-purple-800"
-                        >
-                          <MessageSquare className="h-3 w-3 mr-1" />
-                          Direct
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
                       <div className="flex items-center gap-2">
                         {getStatusIcon(chat.status)}
                         <Badge
@@ -229,11 +224,11 @@ export default function ChatsPage() {
                     <TableCell>
                       <div>
                         <div className="font-medium">{chat.title}</div>
-                        {chat.description && (
+                        {/* {chat.description && (
                           <div className="text-sm text-muted-foreground truncate max-w-xs">
                             {chat.description}
                           </div>
-                        )}
+                        )} */}
                         {chat.chatbot && (
                           <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                             <Bot className="h-3 w-3" />
@@ -253,14 +248,48 @@ export default function ChatsPage() {
                       )}
                     </TableCell>
                     <TableCell>
+                      {chat.escalationRequested ? (
+                        <Badge
+                          variant="outline"
+                          className="text-xs bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800"
+                        >
+                          <PhoneCall className="h-3 w-3 mr-1" />
+                          Support Requested
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {chat.assignedTo ? (
+                        <Badge
+                          variant="outline"
+                          className="text-xs bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
+                        >
+                          <UserCheck className="h-3 w-3 mr-1" />
+                          {chat.assignedTo.name || chat.assignedTo.email}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">
+                          Unassigned
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Badge variant="secondary" className="text-xs">
                         {chat._count.messages} messages
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell
+                      className="text-sm text-muted-foreground"
+                      suppressHydrationWarning
+                    >
                       {formatDate(chat.createdAt)}
                     </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
+                    <TableCell
+                      className="text-sm text-muted-foreground"
+                      suppressHydrationWarning
+                    >
                       {formatDate(chat.updatedAt)}
                     </TableCell>
                     <TableCell

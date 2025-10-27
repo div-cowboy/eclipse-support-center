@@ -8,7 +8,7 @@ import { prisma } from "@/lib/prisma";
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { chatbotId, reason, messages, timestamp } = body;
+    const { chatbotId, chatId, reason, messages, timestamp } = body;
 
     if (!chatbotId) {
       return NextResponse.json(
@@ -17,9 +17,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Log the escalation to console (you can extend this to store in DB or send notifications)
+    // Log the escalation to console
     console.log("🚨 ESCALATION REQUESTED:", {
       chatbotId,
+      chatId,
       reason,
       timestamp: timestamp || new Date().toISOString(),
       messageCount: messages?.length || 0,
@@ -42,14 +43,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Chatbot not found" }, { status: 404 });
     }
 
-    // TODO: Here you can:
-    // 1. Store escalation in database
-    // 2. Send email notification to support team
-    // 3. Create a ticket in your support system
-    // 4. Trigger a webhook to your CRM
-    // 5. Send SMS/Slack notification to on-call support
+    // Update the chat with escalation information if chatId is provided
+    if (chatId) {
+      await prisma.chat.update({
+        where: { id: chatId },
+        data: {
+          escalationRequested: true,
+          escalationReason: reason || "User requested human assistance",
+          escalationRequestedAt: new Date(),
+        },
+      });
+      console.log(`✅ Updated chat ${chatId} with escalation flag`);
+    }
 
-    // Example: Log escalation details
+    // Log escalation details
     console.log("Escalation Details:", {
       organization: chatbot.organization.name,
       chatbot: chatbot.name,
@@ -62,10 +69,17 @@ export async function POST(request: NextRequest) {
         .join("\n"),
     });
 
+    // TODO: Here you can:
+    // 1. Send email notification to support team
+    // 2. Create a ticket in your support system
+    // 3. Trigger a webhook to your CRM
+    // 4. Send SMS/Slack notification to on-call support
+
     return NextResponse.json({
       success: true,
       message: "Escalation logged successfully",
       escalation: {
+        chatId,
         chatbotId,
         chatbotName: chatbot.name,
         organizationName: chatbot.organization.name,
@@ -88,7 +102,7 @@ export async function POST(request: NextRequest) {
 /**
  * GET /api/escalations - Get escalation statistics (optional, for admin dashboard)
  */
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // TODO: Implement escalation statistics
     // This could return:

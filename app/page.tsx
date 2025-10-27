@@ -85,7 +85,7 @@ export default function Home() {
 
           <div className="flex justify-center">
             <iframe
-              src="/embed/chat?chatbotId=cmgzje3c4000am64yeow24kpi&theme=light&welcomeMessage=Welcome%20to%20Eclipse%20Support%20Center!&placeholder=Ask%20me%20anything..."
+              src="/embed/chat?chatbotId=cmgzje3c4000am64yeow24kpi&theme=light&welcomeMessage=Welcome%20to%20Foray%20Golf.%20How%20can%20I%20help%20you%20today?&placeholder=Ask%20me%20anything..."
               width="400"
               height="600"
               className="border rounded-lg shadow-lg"

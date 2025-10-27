@@ -19,7 +19,15 @@ import {
   Building2,
   AlertCircle,
   PhoneCall,
+  Clock,
+  ArrowLeft,
 } from "lucide-react";
+import { EmbedChatsList } from "@/components/chat/EmbedChatsList";
+import {
+  saveChatSession,
+  updateChatSession,
+  isStorageAvailable,
+} from "@/lib/embed-chat-storage";
 
 interface ChatMessage {
   id: string;
@@ -59,6 +67,7 @@ interface EmbedConfig {
 // Component that uses useSearchParams - needs to be wrapped in Suspense
 function EmbedChatContent() {
   const searchParams = useSearchParams();
+  const [view, setView] = useState<"list" | "chat">("list");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -67,6 +76,7 @@ function EmbedChatContent() {
   const [escalationRequested, setEscalationRequested] = useState(false);
   const [escalationReason, setEscalationReason] = useState<string>("");
   const [escalationActivated, setEscalationActivated] = useState(false);
+  const [awaitingSupport, setAwaitingSupport] = useState(false);
   const [chatId, setChatId] = useState<string | null>(null);
   const [chatbotInfo, setChatbotInfo] = useState<{
     id: string;
@@ -78,6 +88,7 @@ function EmbedChatContent() {
     };
   } | null>(null);
   const [hasShownWelcome, setHasShownWelcome] = useState(false);
+  const [storageAvailable, setStorageAvailable] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Parse configuration from URL parameters and data attributes
@@ -97,6 +108,11 @@ function EmbedChatContent() {
     fontSize: searchParams.get("fontSize") || undefined,
   };
 
+  // Check if localStorage is available
+  useEffect(() => {
+    setStorageAvailable(isStorageAvailable());
+  }, []);
+
   // Load chatbot info on mount
   useEffect(() => {
     const loadChatbotInfo = async () => {
@@ -115,6 +131,30 @@ function EmbedChatContent() {
 
     loadChatbotInfo();
   }, [config.chatbotId]);
+
+  // Navigation handlers
+  const handleSelectChat = (selectedChatId: string) => {
+    setChatId(selectedChatId);
+    setView("chat");
+    // Reset chat state
+    setMessages([]);
+    setHasShownWelcome(false);
+    setEscalationRequested(false);
+    setEscalationActivated(false);
+  };
+
+  const handleNewChat = () => {
+    setChatId(null);
+    setMessages([]);
+    setHasShownWelcome(false);
+    setEscalationRequested(false);
+    setEscalationActivated(false);
+    setView("chat");
+  };
+
+  const handleBackToList = () => {
+    setView("list");
+  };
 
   // Show welcome message when chatbot info is loaded
   useEffect(() => {
@@ -215,7 +255,20 @@ function EmbedChatContent() {
 
               // Capture chatId from first response
               if (parsed.chatId && !chatId) {
-                setChatId(parsed.chatId);
+                const newChatId = parsed.chatId;
+                setChatId(newChatId);
+
+                // Save new chat session to localStorage
+                if (storageAvailable && config.chatbotId) {
+                  saveChatSession({
+                    id: newChatId,
+                    chatbotId: config.chatbotId,
+                    createdAt: new Date().toISOString(),
+                    lastMessageAt: new Date().toISOString(),
+                    messageCount: 1,
+                    preview: message.slice(0, 100),
+                  });
+                }
               }
 
               if (parsed.content) {
@@ -252,6 +305,14 @@ function EmbedChatContent() {
           }
         }
       }
+      // Update chat session in localStorage after successful message
+      if (storageAvailable && chatId && config.chatbotId) {
+        updateChatSession(chatId, {
+          lastMessageAt: new Date().toISOString(),
+          messageCount: messages.length + 2, // +2 for user message and assistant message
+          preview: message.slice(0, 100),
+        });
+      }
     } catch (error) {
       console.error("Error sending message:", error);
       const errorMessage: ChatMessage = {
@@ -274,9 +335,10 @@ function EmbedChatContent() {
   };
 
   const handleConnectSupport = async () => {
-    // Activate escalation mode
+    // Activate escalation mode and show waiting state
     setEscalationActivated(true);
     setEscalationRequested(false); // Hide the initial button
+    setAwaitingSupport(true); // Show pending status
 
     // Add handoff message
     const handoffMessage: ChatMessage = {
@@ -310,6 +372,7 @@ function EmbedChatContent() {
 
     // Simulate connection delay, then send support greeting
     setTimeout(() => {
+      setAwaitingSupport(false); // Remove pending status
       const supportGreeting: ChatMessage = {
         id: `support_${Date.now()}`,
         role: "assistant",
@@ -337,6 +400,38 @@ function EmbedChatContent() {
     }),
   };
 
+  // Show list view
+  if (view === "list") {
+    return (
+      <>
+        {/* Custom CSS injection */}
+        {config.customCSS && (
+          <style
+            dangerouslySetInnerHTML={{
+              __html: decodeURIComponent(config.customCSS),
+            }}
+          />
+        )}
+        <div className="h-screen w-full bg-background" style={containerStyle}>
+          <EmbedChatsList
+            chatbotId={config.chatbotId || ""}
+            onSelectChat={handleSelectChat}
+            onNewChat={handleNewChat}
+            chatbotInfo={
+              chatbotInfo
+                ? {
+                    name: chatbotInfo.name,
+                    description: chatbotInfo.description,
+                  }
+                : undefined
+            }
+          />
+        </div>
+      </>
+    );
+  }
+
+  // Show chat view
   return (
     <>
       {/* Custom CSS injection */}
@@ -351,16 +446,42 @@ function EmbedChatContent() {
         <Card className="h-full flex flex-col border-0 shadow-none">
           <CardHeader className="pb-3 border-b">
             <CardTitle className="flex items-center gap-2 text-lg">
+              {/* Back to list button */}
+              {storageAvailable && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleBackToList}
+                  className="mr-2 -ml-2"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Chats
+                </Button>
+              )}
               {escalationActivated ? (
                 <>
-                  <User className="h-5 w-5 text-green-600" />
+                  <User
+                    className={`h-5 w-5 ${
+                      awaitingSupport ? "text-amber-600" : "text-green-600"
+                    }`}
+                  />
                   <span>Customer Support</span>
-                  <Badge
-                    variant="default"
-                    className="ml-2 bg-green-600 text-xs"
-                  >
-                    Live
-                  </Badge>
+                  {awaitingSupport ? (
+                    <Badge
+                      variant="default"
+                      className="ml-2 bg-amber-500 hover:bg-amber-500 text-white text-xs animate-pulse"
+                    >
+                      <Clock className="h-3 w-3 mr-1" />
+                      Awaiting Response
+                    </Badge>
+                  ) : (
+                    <Badge
+                      variant="default"
+                      className="ml-2 bg-green-600 text-xs"
+                    >
+                      Live
+                    </Badge>
+                  )}
                 </>
               ) : (
                 <>
@@ -379,9 +500,14 @@ function EmbedChatContent() {
                   </div>
                 )}
             </CardTitle>
-            {chatbotInfo?.description && (
+            {chatbotInfo?.description && !escalationActivated && (
               <p className="text-sm text-muted-foreground">
                 {chatbotInfo.description}
+              </p>
+            )}
+            {awaitingSupport && (
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                Connecting you with a support representative...
               </p>
             )}
           </CardHeader>

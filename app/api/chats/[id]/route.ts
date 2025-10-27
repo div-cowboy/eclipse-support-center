@@ -56,6 +56,13 @@ export async function GET(
             },
           },
         },
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
     });
 
@@ -174,6 +181,13 @@ export async function PUT(
                 slug: true,
               },
             },
+          },
+        },
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
           },
         },
       },

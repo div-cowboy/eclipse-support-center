@@ -16,11 +16,14 @@ import {
   Clock,
   CheckCircle,
   AlertCircle,
+  Bot,
+  User,
+  PhoneCall,
 } from "lucide-react";
 
 interface ChatMessage {
   id: string;
-  role: "user" | "assistant" | "system";
+  role: "user" | "assistant" | "agent" | "system";
   content: string;
   timestamp: Date;
   metadata?: {
@@ -43,22 +46,38 @@ interface TraditionalChat {
   title: string;
   description?: string;
   status: "ACTIVE" | "ARCHIVED" | "DELETED";
+  escalationRequested: boolean;
+  escalationReason?: string;
+  escalationRequestedAt?: Date;
+  assignedToId?: string;
+  assignedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   messages: ChatMessage[];
   _count: {
     messages: number;
   };
+  chatbot?: {
+    id: string;
+    name: string;
+  };
+  assignedTo?: {
+    id: string;
+    name: string | null;
+    email: string;
+  };
 }
 
 interface TraditionalChatInterfaceProps {
   chatId?: string;
   className?: string;
+  isSupportView?: boolean; // If true, messages are sent as ASSISTANT (support agent)
 }
 
 export function TraditionalChatInterface({
   chatId,
   className = "",
+  isSupportView = false,
 }: TraditionalChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
@@ -79,7 +98,11 @@ export function TraditionalChatInterface({
             const mappedMessages = (data.messages || []).map(
               (msg: DatabaseMessage) => ({
                 ...msg,
-                role: msg.role.toLowerCase() as "user" | "assistant" | "system",
+                role: msg.role.toLowerCase() as
+                  | "user"
+                  | "assistant"
+                  | "agent"
+                  | "system",
                 timestamp: new Date(msg.createdAt),
               })
             );
@@ -105,14 +128,18 @@ export function TraditionalChatInterface({
   const sendMessage = async (message: string) => {
     if (!message.trim() || isLoading) return;
 
-    const userMessage: ChatMessage = {
-      id: `user_${Date.now()}`,
-      role: "user",
+    // If in support view, the message is from the human support agent (ASSISTANT role)
+    // Otherwise, it's from the customer (USER role)
+    const messageRole = isSupportView ? "assistant" : "user";
+
+    const newMessage: ChatMessage = {
+      id: `${messageRole}_${Date.now()}`,
+      role: messageRole,
       content: message,
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [...prev, newMessage]);
     setInputMessage("");
     setIsLoading(true);
 
@@ -125,6 +152,7 @@ export function TraditionalChatInterface({
         body: JSON.stringify({
           message,
           chatId: chatId || undefined,
+          role: isSupportView ? "ASSISTANT" : "USER",
         }),
       });
 
@@ -140,20 +168,23 @@ export function TraditionalChatInterface({
           setChatInfo(data.chat);
         }
 
-        // Add the assistant's response
-        const assistantMessage: ChatMessage = {
-          id: `assistant_${Date.now()}`,
-          role: "assistant",
-          content:
-            data.response ||
-            "Thank you for your message. A support agent will respond shortly.",
-          timestamp: new Date(),
-          metadata: {
-            status: "pending",
-            priority: "medium",
-          },
-        };
-        setMessages((prev) => [...prev, assistantMessage]);
+        // In support view, don't add an auto-response
+        // In customer view, add an AI agent confirmation message
+        if (!isSupportView) {
+          const agentMessage: ChatMessage = {
+            id: `agent_${Date.now()}`,
+            role: "agent",
+            content:
+              data.response ||
+              "Thank you for your message. A support agent will respond shortly.",
+            timestamp: new Date(),
+            metadata: {
+              status: "pending",
+              priority: "medium",
+            },
+          };
+          setMessages((prev) => [...prev, agentMessage]);
+        }
       } else {
         throw new Error(data.error || "Failed to send message");
       }
@@ -199,6 +230,9 @@ export function TraditionalChatInterface({
     }
   };
 
+  // Determine if this is AI or Human responding
+  const isHumanSupport = chatInfo?.assignedToId != null;
+
   return (
     <Card className={`h-[600px] flex flex-col ${className}`}>
       <CardHeader className="pb-3">
@@ -207,6 +241,31 @@ export function TraditionalChatInterface({
           {chatInfo?.title || "Support Chat"}
           {chatInfo && (
             <div className="flex gap-2 ml-auto">
+              {/* AI Agent or Human Assistant Indicator */}
+              {isHumanSupport ? (
+                <Badge variant="default" className="text-xs bg-green-600">
+                  <User className="h-3 w-3 mr-1" />
+                  Human Assistant
+                </Badge>
+              ) : chatInfo.chatbot ? (
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-blue-50 text-blue-700 border-blue-200"
+                >
+                  <Bot className="h-3 w-3 mr-1" />
+                  AI Agent
+                </Badge>
+              ) : null}
+              {/* Escalation Indicator */}
+              {chatInfo.escalationRequested && !isHumanSupport && (
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-amber-50 text-amber-700 border-amber-300"
+                >
+                  <PhoneCall className="h-3 w-3 mr-1" />
+                  Support Requested
+                </Badge>
+              )}
               <Badge variant="outline" className="text-xs">
                 {chatInfo._count?.messages || 0} messages
               </Badge>
@@ -242,91 +301,147 @@ export function TraditionalChatInterface({
             </div>
           )}
 
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex gap-3 ${
-                message.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
-              {/* Left Avatar for Assistant/System messages */}
-              {(message.role === "assistant" || message.role === "system") && (
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                    <span className="text-sm font-semibold text-blue-700 dark:text-blue-300">
-                      CS
-                    </span>
-                  </div>
-                </div>
-              )}
+          {messages.map((message, index) => {
+            // Check if this message is where the handoff happens
+            // First ASSISTANT message after escalation indicates handoff
+            const isHandoffMessage =
+              message.role === "assistant" &&
+              index > 0 &&
+              chatInfo?.escalationRequested &&
+              chatInfo?.assignedAt &&
+              new Date(message.timestamp) >= new Date(chatInfo.assignedAt) &&
+              // Check if this is the first ASSISTANT message
+              !messages.slice(0, index).some((m) => m.role === "assistant");
 
-              <div className="flex flex-col gap-1 max-w-[70%]">
-                {/* Sender Label */}
-                <span className="text-xs text-muted-foreground px-1">
-                  {message.role === "user"
-                    ? "User"
-                    : message.role === "assistant"
-                    ? "Customer Support"
-                    : "System"}
-                </span>
+            // Note: Message types are determined by role directly in the rendering logic below
+
+            return (
+              <div key={message.id}>
+                {/* Show handoff banner when it happens */}
+                {isHandoffMessage && (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-full">
+                      <PhoneCall className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <span className="text-sm font-medium text-green-900 dark:text-green-100">
+                        Chat transferred to human support
+                      </span>
+                    </div>
+                  </div>
+                )}
 
                 <div
-                  className={`rounded-lg px-4 py-2 ${
-                    message.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : message.role === "system"
-                      ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
-                      : "bg-muted"
+                  className={`flex gap-3 ${
+                    message.role === "user" ? "justify-start" : "justify-end"
                   }`}
                 >
-                  <p className="text-sm whitespace-pre-wrap">
-                    {message.content}
-                  </p>
-
-                  {/* Message metadata */}
-                  {message.metadata && (
-                    <div className="flex items-center gap-2 mt-2 text-xs">
-                      {message.metadata.status && (
-                        <div className="flex items-center gap-1">
-                          {getStatusIcon(message.metadata.status)}
-                          <span className="capitalize">
-                            {message.metadata.status}
-                          </span>
-                        </div>
-                      )}
-                      {message.metadata.priority && (
-                        <Badge variant="outline" className="text-xs">
-                          {message.metadata.priority}
-                        </Badge>
-                      )}
-                      {message.metadata.assignedTo && (
-                        <span className="text-muted-foreground">
-                          Assigned to: {message.metadata.assignedTo}
-                        </span>
-                      )}
+                  {/* Left Avatar for User messages (Customer) */}
+                  {message.role === "user" && (
+                    <div className="flex-shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                        <User className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      </div>
                     </div>
                   )}
 
-                  <p className="text-xs opacity-70 mt-1">
-                    {message.timestamp
-                      ? message.timestamp.toLocaleTimeString()
-                      : new Date().toLocaleTimeString()}
-                  </p>
+                  <div className="flex flex-col gap-1 max-w-[70%]">
+                    {/* Sender Label */}
+                    <span
+                      className={`text-xs text-muted-foreground px-1 ${
+                        message.role === "user" ? "text-left" : "text-right"
+                      }`}
+                    >
+                      {message.role === "user"
+                        ? "Customer"
+                        : message.role === "agent"
+                        ? "AI Agent"
+                        : message.role === "assistant"
+                        ? chatInfo?.assignedTo?.name || "Support Agent"
+                        : "System"}
+                    </span>
+
+                    <div
+                      className={`rounded-lg px-4 py-2 ${
+                        message.role === "user"
+                          ? "bg-muted"
+                          : message.role === "system"
+                          ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
+                          : message.role === "agent"
+                          ? "bg-blue-600 text-white"
+                          : "bg-green-600 text-white"
+                      }`}
+                    >
+                      <p className="text-sm whitespace-pre-wrap">
+                        {message.content}
+                      </p>
+
+                      {/* Message metadata */}
+                      {message.metadata && (
+                        <div className="flex items-center gap-2 mt-2 text-xs">
+                          {message.metadata.status && (
+                            <div className="flex items-center gap-1">
+                              {getStatusIcon(message.metadata.status)}
+                              <span className="capitalize">
+                                {message.metadata.status}
+                              </span>
+                            </div>
+                          )}
+                          {message.metadata.priority && (
+                            <Badge variant="outline" className="text-xs">
+                              {message.metadata.priority}
+                            </Badge>
+                          )}
+                          {message.metadata.assignedTo && (
+                            <span className="text-muted-foreground">
+                              Assigned to: {message.metadata.assignedTo}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      <p
+                        className={`text-xs mt-1 ${
+                          message.role === "agent"
+                            ? "text-blue-100"
+                            : message.role === "assistant"
+                            ? "text-green-100"
+                            : "opacity-70"
+                        }`}
+                      >
+                        {message.timestamp
+                          ? message.timestamp.toLocaleTimeString()
+                          : new Date().toLocaleTimeString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Right Avatar for Agent/Assistant/System messages (Support) */}
+                  {(message.role === "agent" ||
+                    message.role === "assistant" ||
+                    message.role === "system") && (
+                    <div className="flex-shrink-0">
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          message.role === "agent"
+                            ? "bg-blue-100 dark:bg-blue-900"
+                            : message.role === "assistant"
+                            ? "bg-green-100 dark:bg-green-900"
+                            : "bg-orange-100 dark:bg-orange-900"
+                        }`}
+                      >
+                        {message.role === "agent" ? (
+                          <Bot className="h-5 w-5 text-blue-600 dark:text-blue-300" />
+                        ) : message.role === "assistant" ? (
+                          <User className="h-5 w-5 text-green-600 dark:text-green-300" />
+                        ) : (
+                          <AlertCircle className="h-5 w-5 text-orange-600 dark:text-orange-300" />
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-
-              {/* Right Avatar for User messages */}
-              {message.role === "user" && (
-                <div className="flex-shrink-0">
-                  <div className="w-10 h-10 rounded-full bg-black dark:bg-white flex items-center justify-center">
-                    <span className="text-sm font-semibold text-white dark:text-black">
-                      U
-                    </span>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
 
           <div ref={messagesEndRef} />
         </div>
@@ -337,7 +452,11 @@ export function TraditionalChatInterface({
             <Input
               value={inputMessage}
               onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Type your message..."
+              placeholder={
+                isHumanSupport
+                  ? "Type your response as support agent..."
+                  : "Type your response (AI bot mode)..."
+              }
               disabled={isLoading}
               className="flex-1"
             />

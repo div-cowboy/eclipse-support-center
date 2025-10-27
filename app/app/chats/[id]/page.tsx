@@ -18,6 +18,9 @@ import {
   Bot,
   Building2,
   MessageSquare,
+  PhoneCall,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import { TraditionalChatInterface } from "@/components/chat/TraditionalChatInterface";
 import { VectorSearchResult } from "@/lib/vector-db";
@@ -27,6 +30,11 @@ interface TraditionalChat {
   title: string;
   description?: string;
   status: "ACTIVE" | "ARCHIVED" | "DELETED";
+  escalationRequested: boolean;
+  escalationReason?: string;
+  escalationRequestedAt?: Date;
+  assignedToId?: string;
+  assignedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
   messages: Array<{
@@ -49,6 +57,11 @@ interface TraditionalChat {
       slug: string;
     };
   };
+  assignedTo?: {
+    id: string;
+    name: string | null;
+    email: string;
+  };
 }
 
 export default function ChatDetailPage() {
@@ -57,6 +70,7 @@ export default function ChatDetailPage() {
   const chatId = params.id as string;
   const [chat, setChat] = useState<TraditionalChat | null>(null);
   const [loading, setLoading] = useState(true);
+  const [assigningChat, setAssigningChat] = useState(false);
 
   useEffect(() => {
     const fetchChat = async () => {
@@ -77,6 +91,50 @@ export default function ChatDetailPage() {
 
     fetchChat();
   }, [chatId]);
+
+  const handlePickUpChat = async () => {
+    setAssigningChat(true);
+    try {
+      const response = await fetch(`/api/chats/${chatId}/assign`, {
+        method: "POST",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setChat(data.chat);
+      } else {
+        const error = await response.json();
+        alert(error.error || "Failed to assign chat");
+      }
+    } catch (error) {
+      console.error("Error assigning chat:", error);
+      alert("Failed to assign chat");
+    } finally {
+      setAssigningChat(false);
+    }
+  };
+
+  const handleReleaseChat = async () => {
+    setAssigningChat(true);
+    try {
+      const response = await fetch(`/api/chats/${chatId}/assign`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setChat(data.chat);
+      } else {
+        const error = await response.json();
+        alert(error.error || "Failed to release chat");
+      }
+    } catch (error) {
+      console.error("Error releasing chat:", error);
+      alert("Failed to release chat");
+    } finally {
+      setAssigningChat(false);
+    }
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -105,13 +163,14 @@ export default function ChatDetailPage() {
   };
 
   const formatDate = (date: Date) => {
-    return new Date(date).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    // Use ISO format to avoid hydration mismatches between server and client
+    const d = new Date(date);
+    const month = d.toLocaleString("en-US", { month: "short" });
+    const day = d.getDate();
+    const year = d.getFullYear();
+    const hours = d.getHours().toString().padStart(2, "0");
+    const minutes = d.getMinutes().toString().padStart(2, "0");
+    return `${month} ${day}, ${year} ${hours}:${minutes}`;
   };
 
   if (loading) {
@@ -177,10 +236,23 @@ export default function ChatDetailPage() {
                 Direct Support
               </Badge>
             )}
+            {chat.escalationRequested && (
+              <Badge
+                variant="outline"
+                className="text-xs bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800"
+              >
+                <PhoneCall className="h-3 w-3 mr-1" />
+                Support Requested
+              </Badge>
+            )}
           </div>
           <div className="flex items-center gap-4 text-sm text-muted-foreground">
-            <span>Created: {formatDate(chat.createdAt)}</span>
-            <span>Last updated: {formatDate(chat.updatedAt)}</span>
+            <span suppressHydrationWarning>
+              Created: {formatDate(chat.createdAt)}
+            </span>
+            <span suppressHydrationWarning>
+              Last updated: {formatDate(chat.updatedAt)}
+            </span>
             <span>{chat._count.messages} messages</span>
           </div>
         </div>
@@ -190,11 +262,98 @@ export default function ChatDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4">
         {/* Left Column - Chat Interface */}
         <div className="min-h-[calc(100vh-200px)]">
-          <TraditionalChatInterface chatId={chat.id} className="h-full" />
+          <TraditionalChatInterface 
+            chatId={chat.id} 
+            className="h-full"
+            isSupportView={true}
+          />
         </div>
 
         {/* Right Column - Information Cards */}
         <div className="space-y-4">
+          {/* Chat Actions Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <UserCheck className="h-5 w-5" />
+                Chat Actions
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {chat.escalationRequested && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <div className="flex items-start gap-2 mb-2">
+                    <PhoneCall className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                        Support Requested
+                      </p>
+                      {chat.escalationReason && (
+                        <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                          {chat.escalationReason}
+                        </p>
+                      )}
+                      {chat.escalationRequestedAt && (
+                        <p
+                          className="text-xs text-amber-600 dark:text-amber-400 mt-1"
+                          suppressHydrationWarning
+                        >
+                          {formatDate(new Date(chat.escalationRequestedAt))}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {chat.assignedTo ? (
+                <div className="space-y-2">
+                  <div className="p-3 bg-green-50 dark:bg-green-950 rounded-lg border border-green-200 dark:border-green-800">
+                    <div className="flex items-start gap-2">
+                      <UserCheck className="h-4 w-4 text-green-600 dark:text-green-400 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                          Assigned To
+                        </p>
+                        <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                          {chat.assignedTo.name || chat.assignedTo.email}
+                        </p>
+                        {chat.assignedAt && (
+                          <p
+                            className="text-xs text-green-600 dark:text-green-400 mt-1"
+                            suppressHydrationWarning
+                          >
+                            {formatDate(new Date(chat.assignedAt))}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={handleReleaseChat}
+                    disabled={assigningChat}
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                  >
+                    <UserX className="h-4 w-4 mr-2" />
+                    {assigningChat ? "Releasing..." : "Release Chat"}
+                  </Button>
+                </div>
+              ) : (
+                <Button
+                  onClick={handlePickUpChat}
+                  disabled={assigningChat}
+                  size="sm"
+                  className="w-full"
+                >
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  {assigningChat ? "Picking Up..." : "Pick Up Chat"}
+                </Button>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Chat Details Card */}
           <Card>
             <CardHeader>
@@ -222,13 +381,17 @@ export default function ChatDetailPage() {
                 <p className="text-sm font-medium text-muted-foreground mb-1">
                   Created
                 </p>
-                <p className="text-sm">{formatDate(chat.createdAt)}</p>
+                <p className="text-sm" suppressHydrationWarning>
+                  {formatDate(chat.createdAt)}
+                </p>
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground mb-1">
                   Last Updated
                 </p>
-                <p className="text-sm">{formatDate(chat.updatedAt)}</p>
+                <p className="text-sm" suppressHydrationWarning>
+                  {formatDate(chat.updatedAt)}
+                </p>
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground mb-1">

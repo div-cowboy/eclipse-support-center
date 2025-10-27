@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
+import { MessageRole } from "@prisma/client";
 
 // GET /api/chats - List all chats from user's organizations (both embedded and traditional)
 export async function GET() {
@@ -79,6 +80,13 @@ export async function GET() {
             },
           },
         },
+        assignedTo: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
       },
       orderBy: {
         updatedAt: "desc",
@@ -113,7 +121,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { message, chatId } = body;
+    const { message, chatId, role } = body;
 
     if (!message) {
       return NextResponse.json(
@@ -121,6 +129,14 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Determine the message role:
+    // - AGENT = AI bot response (automated agent)
+    // - ASSISTANT = Human support agent response
+    // - USER = Customer message (default)
+    const messageRole = (
+      role === "ASSISTANT" ? "ASSISTANT" : role === "AGENT" ? "AGENT" : "USER"
+    ) as MessageRole;
 
     let chat;
 
@@ -141,11 +157,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Chat not found" }, { status: 404 });
       }
 
-      // Add the user message
+      // Add the message
       await prisma.message.create({
         data: {
           content: message,
-          role: "USER",
+          role: messageRole,
           chatId: chatId,
           userId: user.id,
         },
@@ -188,11 +204,11 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // Add the user message
+      // Add the initial message
       await prisma.message.create({
         data: {
           content: message,
-          role: "USER",
+          role: messageRole,
           chatId: chat.id,
           userId: user.id,
         },

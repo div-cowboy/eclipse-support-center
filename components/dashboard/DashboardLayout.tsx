@@ -26,7 +26,7 @@ export function DashboardLayout({ children, user }: DashboardLayoutProps) {
             <DashboardSidebar className="w-full max-w-[250px]" />
           </div>
 
-          <main className="w-[calc(100%-350px)] overflow-auto p-10 ">
+          <main className="w-[calc(100%-350px)] overflow-auto p-10 flex-1">
             <div className="mx-auto max-w-8xl">{children}</div>
           </main>
         </div>
