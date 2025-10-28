@@ -223,7 +223,13 @@
 
   <script>
     // Get base URL (works in both dev and production)
-    const baseURL = window.location.origin;
+    // For testing, if opened as file://, use localhost
+    const baseURL = window.location.protocol === 'file:' 
+      ? 'http://localhost:3000' 
+      : window.location.origin;
+    
+    console.log('🌐 Base URL:', baseURL);
+    console.log('🔗 Current origin:', window.location.origin);
 
     function updateIframe() {
       const chatbotId = document.getElementById('chatbotId').value;

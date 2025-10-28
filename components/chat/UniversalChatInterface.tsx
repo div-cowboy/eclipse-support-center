@@ -23,10 +23,11 @@ import {
   Eye,
   EyeOff,
   Bug,
-  FileText,
   ArrowLeft,
 } from "lucide-react";
 import { TypingIndicator } from "./TypingIndicator";
+import { useRealtimeChat } from "../hooks/useRealtimeChat";
+import type { RealtimeChatMessage } from "../hooks/useRealtimeChat";
 
 // Universal message interface that covers all use cases
 interface ChatMessage {
@@ -87,6 +88,7 @@ export interface ChatConfig {
     contextBlocks?: boolean;
     multiChat?: boolean;
     supportView?: boolean;
+    realtimeMode?: boolean; // Enable real-time chat (for escalated chats)
     showBranding?: boolean;
     showSources?: boolean;
     showTokens?: boolean;
@@ -130,17 +132,106 @@ export function UniversalChatInterface({
   const [escalationActivated, setEscalationActivated] = useState(false);
   const [awaitingSupport, setAwaitingSupport] = useState(false);
 
+  // Real-time chat state
+  const [realtimeMode, setRealtimeMode] = useState(
+    config.features.realtimeMode || false
+  );
+
   // Chat info state
-  const [chatInfo, setChatInfo] = useState<any>(null);
+  const [chatInfo, setChatInfo] = useState<{
+    name?: string;
+    status?: string;
+    escalationRequested?: boolean;
+    assignedToId?: string;
+    assignedTo?: { name?: string };
+    assignedAt?: string;
+    organization?: { name: string };
+    _count?: { messages?: number; contextBlocks?: number };
+  } | null>(null);
   const [hasShownWelcome, setHasShownWelcome] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Real-time chat hook - handles message broadcasting
+  const { sendMessage: sendRealtimeMessage } = useRealtimeChat({
+    chatId: config.chatId || "",
+    enabled: realtimeMode && !!config.chatId,
+    onMessage: (message: RealtimeChatMessage) => {
+      // Add incoming real-time message to messages array
+      console.log("[UniversalChatInterface] Received real-time message:", {
+        id: message.id,
+        role: message.role,
+        sender: message.sender.name,
+      });
+
+      const chatMessage: ChatMessage = {
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        timestamp: new Date(message.timestamp),
+      };
+
+      setMessages((prev) => {
+        // Check if message already exists (avoid duplicates from optimistic updates)
+        const exists = prev.some((msg) => msg.id === message.id);
+        if (exists) {
+          console.log(
+            "[UniversalChatInterface] Message already exists, skipping"
+          );
+          return prev;
+        }
+
+        // Remove any optimistic message with same content (replace optimistic with real)
+        const withoutOptimistic = prev.filter(
+          (msg) =>
+            !msg.id.startsWith("optimistic_") || msg.content !== message.content
+        );
+
+        return [...withoutOptimistic, chatMessage];
+      });
+    },
+    onAgentJoined: (agent) => {
+      // Show system message when agent joins
+      console.log("🎉 AGENT JOINED EVENT RECEIVED:", agent);
+      setAwaitingSupport(false);
+
+      // Check if we already have an agent joined message (prevent duplicates)
+      setMessages((prev) => {
+        const hasAgentJoined = prev.some((msg) =>
+          msg.id.startsWith("system_agent_joined_")
+        );
+
+        if (hasAgentJoined) {
+          console.log(
+            "⚠️ Agent joined message already exists, skipping duplicate"
+          );
+          return prev;
+        }
+
+        const systemMessage: ChatMessage = {
+          id: `system_agent_joined_${Date.now()}`,
+          role: "system",
+          content: `✅ You're now connected to ${agent.agentName}`,
+          timestamp: new Date(agent.timestamp),
+        };
+
+        console.log("✅ Agent joined message added to chat");
+        return [...prev, systemMessage];
+      });
+    },
+    onError: (error) => {
+      console.error("[UniversalChatInterface] Real-time error:", error);
+    },
+  });
+
   // Load chat info based on type
   useEffect(() => {
     const loadChatInfo = async () => {
-      if (config.type === "chatbot" && config.chatbotId) {
+      if (
+        (config.type === "chatbot" || config.type === "embed") &&
+        config.chatbotId
+      ) {
         try {
           const endpoint =
             config.type === "embed"
@@ -161,15 +252,21 @@ export function UniversalChatInterface({
             const data = await response.json();
             setChatInfo(data);
             // Map database message roles to frontend format
-            const mappedMessages = (data.messages || []).map((msg: any) => ({
-              ...msg,
-              role: msg.role.toLowerCase() as
-                | "user"
-                | "assistant"
-                | "agent"
-                | "system",
-              timestamp: new Date(msg.createdAt),
-            }));
+            const mappedMessages = (data.messages || []).map(
+              (msg: {
+                role: string;
+                createdAt: string;
+                [key: string]: unknown;
+              }) => ({
+                ...msg,
+                role: msg.role.toLowerCase() as
+                  | "user"
+                  | "assistant"
+                  | "agent"
+                  | "system",
+                timestamp: new Date(msg.createdAt),
+              })
+            );
             setMessages(mappedMessages);
           }
         } catch (error) {
@@ -209,6 +306,70 @@ export function UniversalChatInterface({
   ) => {
     if (!message.trim() || isLoading) return;
 
+    console.log("[UniversalChatInterface] sendMessage called:", {
+      realtimeMode,
+      chatId: config.chatId,
+      supportView: config.features.supportView,
+      willUseRealtime: realtimeMode && !!config.chatId,
+    });
+
+    // REAL-TIME MODE: Route to real-time chat system
+    if (realtimeMode && config.chatId) {
+      const messageRole = config.features.supportView ? "ASSISTANT" : "USER";
+
+      console.log("[UniversalChatInterface] Using REAL-TIME mode:", {
+        messageRole,
+        chatId: config.chatId,
+      });
+
+      // OPTIMISTIC UI UPDATE: Add message to UI immediately
+      const optimisticMessage: ChatMessage = {
+        id: `optimistic_${Date.now()}`,
+        role: messageRole === "ASSISTANT" ? "assistant" : "user",
+        content: message,
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, optimisticMessage]);
+
+      setInputMessage("");
+      setIsLoading(true);
+
+      try {
+        const success = await sendRealtimeMessage(message, messageRole);
+
+        if (!success) {
+          throw new Error("Failed to send real-time message");
+        }
+
+        console.log(
+          "[UniversalChatInterface] Real-time message sent successfully"
+        );
+      } catch (error) {
+        console.error("Error sending real-time message:", error);
+
+        // Remove optimistic message
+        setMessages((prev) =>
+          prev.filter((msg) => msg.id !== optimisticMessage.id)
+        );
+
+        // Show error message
+        const errorMessage: ChatMessage = {
+          id: `error_${Date.now()}`,
+          role: "system",
+          content: "Failed to send message. Please try again.",
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, errorMessage]);
+      } finally {
+        setIsLoading(false);
+      }
+
+      return; // Exit early for real-time mode
+    }
+
+    console.log("[UniversalChatInterface] Using AI mode (not real-time)");
+
+    // AI MODE: Normal AI processing (existing code)
     const messageRole = config.features.supportView ? "assistant" : "user";
     const userMessage: ChatMessage = {
       id: `${messageRole}_${Date.now()}`,
@@ -227,7 +388,14 @@ export function UniversalChatInterface({
     }
 
     try {
-      const requestBody: any = {
+      const requestBody: {
+        message: string;
+        conversationHistory: ChatMessage[];
+        organizationId?: string;
+        stream?: boolean;
+        chatId?: string;
+        role?: string;
+      } = {
         message,
         conversationHistory: messages,
       };
@@ -238,13 +406,19 @@ export function UniversalChatInterface({
         requestBody.stream = useStreaming;
       } else if (config.type === "chatbot" || config.type === "embed") {
         requestBody.stream = useStreaming;
-        if (config.chatId) {
-          requestBody.chatId = config.chatId;
-        }
+        // Always send chatId if available
+        requestBody.chatId = config.chatId;
+        console.log("📤 Sending message with chatId:", config.chatId);
       } else if (config.type === "traditional") {
         requestBody.chatId = config.chatId || undefined;
         requestBody.role = config.features.supportView ? "ASSISTANT" : "USER";
       }
+
+      console.log("[UniversalChatInterface] Calling AI API:", {
+        endpoint: config.apiEndpoint,
+        chatId: config.chatId,
+        type: config.type,
+      });
 
       const response = await fetch(config.apiEndpoint, {
         method: config.apiMethod || "POST",
@@ -315,9 +489,16 @@ export function UniversalChatInterface({
             try {
               const parsed = JSON.parse(data);
 
-              // Capture chatId from first response
-              if (parsed.chatId && !config.chatId && config.onChatCreated) {
-                config.onChatCreated(parsed.chatId);
+              // Capture chatId from response
+              if (parsed.chatId && config.onChatCreated) {
+                // Only call once
+                if (!assistantMessage && !config.chatId) {
+                  config.onChatCreated(parsed.chatId);
+                  console.log(
+                    "📝 Chat ID captured from streaming:",
+                    parsed.chatId
+                  );
+                }
               }
 
               if (parsed.content) {
@@ -379,8 +560,11 @@ export function UniversalChatInterface({
       setMessages((prev) => [...prev, assistantMessage]);
 
       // Update chat info for new chats
-      if (!config.chatId && data.chat && config.onChatCreated) {
-        config.onChatCreated(data.chat.id);
+      if (data.chatId && config.onChatCreated) {
+        config.onChatCreated(data.chatId);
+        console.log("📝 Chat ID captured from response:", data.chatId);
+      }
+      if (data.chat) {
         setChatInfo(data.chat);
       }
 
@@ -431,8 +615,8 @@ export function UniversalChatInterface({
 
     const handoffMessage: ChatMessage = {
       id: `system_${Date.now()}`,
-      role: "assistant",
-      content: "🔄 Transferring you to a customer support representative...",
+      role: "system",
+      content: "⏱️ Connecting you to a support agent. Please wait...",
       timestamp: new Date(),
       metadata: {
         escalationRequested: true,
@@ -440,26 +624,59 @@ export function UniversalChatInterface({
     };
     setMessages((prev) => [...prev, handoffMessage]);
 
-    // Log escalation
-    if (config.onEscalationRequested) {
-      config.onEscalationRequested(escalationReason);
-    }
-
-    // Simulate connection delay
-    setTimeout(() => {
-      setAwaitingSupport(false);
-      const supportGreeting: ChatMessage = {
-        id: `support_${Date.now()}`,
-        role: "assistant",
-        content:
-          "👋 Hi! I'm a customer support representative. I've reviewed your conversation. What can I help you with today?",
-        timestamp: new Date(),
-        metadata: {
-          escalationRequested: false,
+    try {
+      // Call escalation API to mark chat as escalated
+      const escalationResponse = await fetch("/api/escalations", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          chatbotId: config.chatbotId,
+          chatId: config.chatId,
+          reason: escalationReason || "User requested human assistance",
+          messages: messages,
+          timestamp: new Date().toISOString(),
+        }),
+      });
+
+      if (!escalationResponse.ok) {
+        throw new Error("Failed to log escalation");
+      }
+
+      console.log("✅ Escalation logged successfully");
+
+      // Activate real-time mode
+      setRealtimeMode(true);
+
+      console.log("✅ Real-time mode activated - waiting for agent to join");
+      console.log("📡 Real-time subscription details:", {
+        chatId: config.chatId,
+        realtimeMode: true,
+        enabled: true && !!config.chatId,
+        channelName: `chat:${config.chatId}`,
+      });
+
+      // Log escalation callback
+      if (config.onEscalationRequested) {
+        config.onEscalationRequested(escalationReason);
+      }
+    } catch (error) {
+      console.error("Error during escalation:", error);
+
+      // Show error message
+      const errorMessage: ChatMessage = {
+        id: `error_${Date.now()}`,
+        role: "system",
+        content:
+          "Failed to connect to support. Please try again or contact us directly.",
+        timestamp: new Date(),
       };
-      setMessages((prev) => [...prev, supportGreeting]);
-    }, 1500);
+      setMessages((prev) => [...prev, errorMessage]);
+
+      setAwaitingSupport(false);
+      setEscalationActivated(false);
+    }
   };
 
   const getSourceIcon = (type?: string) => {

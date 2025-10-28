@@ -12,7 +12,8 @@ import {
   CardTitle,
 } from "@/components/shadcn/ui/card";
 import { ArrowLeft, Send } from "lucide-react";
-import { TraditionalChatInterface } from "@/components/chat/TraditionalChatInterface";
+import { UniversalChatInterface } from "@/components/chat/UniversalChatInterface";
+import type { ChatConfig } from "@/components/chat/UniversalChatInterface";
 
 export default function NewChatPage() {
   const router = useRouter();
@@ -56,6 +57,30 @@ export default function NewChatPage() {
   };
 
   if (createdChatId) {
+    const chatConfig: ChatConfig = {
+      apiEndpoint: "/api/chats",
+      type: "traditional",
+      chatId: createdChatId,
+      title: "Support Chat",
+      placeholder: "Type your message...",
+      className: "h-[700px]",
+      features: {
+        streaming: false,
+        escalation: false,
+        debugMode: false,
+        contextBlocks: false,
+        multiChat: false,
+        supportView: false, // Customer view
+        realtimeMode: false, // Will be enabled after escalation
+        showBranding: false,
+        showSources: false,
+        showTokens: false,
+        showStatus: true,
+        showPriority: true,
+        showAssignedTo: true,
+      },
+    };
+
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
@@ -72,10 +97,7 @@ export default function NewChatPage() {
           </h1>
         </div>
 
-        <TraditionalChatInterface
-          chatId={createdChatId}
-          className="h-[700px]"
-        />
+        <UniversalChatInterface config={chatConfig} />
       </div>
     );
   }

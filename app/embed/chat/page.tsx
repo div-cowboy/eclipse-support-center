@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { UniversalChatInterface } from "@/components/chat/UniversalChatInterface";
 import { EmbedChatsList } from "@/components/chat/EmbedChatsList";
@@ -32,8 +32,13 @@ function EmbedChatContent() {
   const searchParams = useSearchParams();
   const [view, setView] = useState<"list" | "chat">("list");
   const [chatId, setChatId] = useState<string | null>(null);
-  const [chatbotInfo, setChatbotInfo] = useState<any>(null);
+  const [chatbotInfo, setChatbotInfo] = useState<{
+    name?: string;
+    description?: string;
+    [key: string]: unknown;
+  } | null>(null);
   const [storageAvailable, setStorageAvailable] = useState(false);
+  const [isEscalated, setIsEscalated] = useState(false); // Track escalation state
 
   // Parse configuration from URL parameters
   const config: EmbedConfig = {
@@ -76,100 +81,159 @@ function EmbedChatContent() {
     loadChatbotInfo();
   }, [config.chatbotId]);
 
-  // Navigation handlers
-  const handleSelectChat = (selectedChatId: string) => {
+  // Navigation handlers (useCallback to prevent recreating on every render)
+  const handleSelectChat = useCallback((selectedChatId: string) => {
     setChatId(selectedChatId);
     setView("chat");
-  };
+  }, []);
 
-  const handleNewChat = () => {
+  const handleNewChat = useCallback(() => {
     setChatId(null);
     setView("chat");
-  };
+  }, []);
 
-  const handleBackToList = () => {
+  const handleBackToList = useCallback(() => {
     setView("list");
-  };
+  }, []);
 
-  const handleChatCreated = (newChatId: string) => {
-    setChatId(newChatId);
+  const handleChatCreated = useCallback(
+    (newChatId: string) => {
+      console.log(
+        "[EmbedChat] Chat created - updating chatId state:",
+        newChatId
+      );
+      setChatId(newChatId);
 
-    // Save new chat session to localStorage
-    if (storageAvailable && config.chatbotId) {
-      saveChatSession({
-        id: newChatId,
-        chatbotId: config.chatbotId,
-        createdAt: new Date().toISOString(),
-        lastMessageAt: new Date().toISOString(),
-        messageCount: 1,
-        preview: "New conversation",
-      });
-    }
-  };
-
-  const handleEscalationRequested = async (reason: string) => {
-    // Log escalation to backend
-    try {
-      await fetch("/api/escalations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      // Save new chat session to localStorage
+      if (storageAvailable && config.chatbotId) {
+        saveChatSession({
+          id: newChatId,
           chatbotId: config.chatbotId,
-          chatId: chatId,
-          reason: reason,
-          messages: [], // We don't have access to messages here, but the backend can fetch them
-          timestamp: new Date().toISOString(),
-          isEmbedded: true,
-        }),
-      });
-    } catch (error) {
-      console.error("Error logging escalation:", error);
-    }
-  };
+          createdAt: new Date().toISOString(),
+          lastMessageAt: new Date().toISOString(),
+          messageCount: 1,
+          preview: "New conversation",
+        });
+      }
+    },
+    [storageAvailable, config.chatbotId]
+  );
 
-  const handleMessageSent = (message: any) => {
+  const handleEscalationRequested = useCallback(
+    async (reason: string) => {
+      // Log escalation to backend
+      try {
+        await fetch("/api/escalations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            chatbotId: config.chatbotId,
+            chatId: chatId,
+            reason: reason,
+            messages: [], // We don't have access to messages here, but the backend can fetch them
+            timestamp: new Date().toISOString(),
+            isEmbedded: true,
+          }),
+        });
+
+        // Mark as escalated to enable real-time mode
+        setIsEscalated(true);
+        console.log(
+          "[EmbedChat] Escalation completed, enabling real-time mode"
+        );
+      } catch (error) {
+        console.error("Error logging escalation:", error);
+      }
+    },
+    [config.chatbotId, chatId]
+  );
+
+  const handleMessageSent = useCallback(() => {
+    console.log("[EmbedChat] Message sent:", { chatId, isEscalated });
+
     // Update chat session in localStorage after successful message
     if (storageAvailable && chatId && config.chatbotId) {
       updateChatSession(chatId, {
         lastMessageAt: new Date().toISOString(),
         messageCount: 1, // This will be incremented by the backend
-        preview: message.content.slice(0, 100),
+        preview: "Recent message",
       });
     }
-  };
+  }, [chatId, isEscalated, storageAvailable, config.chatbotId]);
 
-  // Create universal chat config
-  const chatConfig: ChatConfig = {
-    apiEndpoint: `/api/embed/chatbots/${config.chatbotId}/chat`,
-    type: "embed",
-    chatbotId: config.chatbotId,
-    chatId: chatId || undefined,
-    title: chatbotInfo?.name || "AI Assistant",
-    description: chatbotInfo?.description,
-    placeholder: config.placeholder,
-    welcomeMessage: config.welcomeMessage,
-    height: config.height,
-    className: "h-full border-0 shadow-none",
-    features: {
-      streaming: true,
-      escalation: true,
-      multiChat: storageAvailable,
-      showBranding: config.showBranding,
-      showSources: false, // Hide sources in embed by default
-      showTokens: false, // Hide tokens in embed by default
-    },
-    styling: {
-      primaryColor: config.primaryColor,
-      borderRadius: config.borderRadius,
-      fontFamily: config.fontFamily,
-      fontSize: config.fontSize,
-      customCSS: config.customCSS,
-    },
-    onChatCreated: handleChatCreated,
-    onEscalationRequested: handleEscalationRequested,
-    onMessageSent: handleMessageSent,
-    onBackToList: handleBackToList,
-  };
+  // Log current state for debugging
+  useEffect(() => {
+    console.log("[EmbedChat] State changed:", {
+      chatId,
+      isEscalated,
+      realtimeModeEnabled: isEscalated && !!chatId,
+      view,
+    });
+  }, [chatId, isEscalated, view]);
+
+  // Create universal chat config (memoized to prevent unnecessary re-renders)
+  const chatConfig: ChatConfig = useMemo(() => {
+    console.log("[EmbedChat] Creating chat config:", {
+      chatId,
+      isEscalated,
+      realtimeMode: isEscalated && !!chatId,
+    });
+
+    return {
+      apiEndpoint: `/api/embed/chatbots/${config.chatbotId}/chat`,
+      type: "embed",
+      chatbotId: config.chatbotId,
+      chatId: chatId || undefined,
+      title: chatbotInfo?.name || "AI Assistant",
+      description: chatbotInfo?.description,
+      placeholder: isEscalated
+        ? "Message support agent..."
+        : config.placeholder,
+      welcomeMessage: config.welcomeMessage,
+      height: config.height,
+      className: "h-full border-0 shadow-none",
+      features: {
+        streaming: true,
+        escalation: !isEscalated, // Disable escalation button once escalated
+        multiChat: storageAvailable,
+        realtimeMode: isEscalated && !!chatId, // Enable real-time mode after escalation
+        showBranding: config.showBranding,
+        showSources: false, // Hide sources in embed by default
+        showTokens: false, // Hide tokens in embed by default
+      },
+      styling: {
+        primaryColor: config.primaryColor,
+        borderRadius: config.borderRadius,
+        fontFamily: config.fontFamily,
+        fontSize: config.fontSize,
+        customCSS: config.customCSS,
+      },
+      onChatCreated: handleChatCreated,
+      onEscalationRequested: handleEscalationRequested,
+      onMessageSent: handleMessageSent,
+      onBackToList: handleBackToList,
+    };
+  }, [
+    chatId,
+    isEscalated,
+    config.chatbotId,
+    config.placeholder,
+    config.primaryColor,
+    config.borderRadius,
+    config.fontFamily,
+    config.fontSize,
+    config.customCSS,
+    config.welcomeMessage,
+    config.height,
+    config.showBranding,
+    chatbotInfo?.name,
+    chatbotInfo?.description,
+    storageAvailable,
+    handleChatCreated,
+    handleEscalationRequested,
+    handleMessageSent,
+    handleBackToList,
+  ]);
 
   // Apply custom styling based on configuration
   const containerStyle: React.CSSProperties = {
@@ -202,10 +266,10 @@ function EmbedChatContent() {
             onSelectChat={handleSelectChat}
             onNewChat={handleNewChat}
             chatbotInfo={
-              chatbotInfo
+              chatbotInfo && chatbotInfo.name
                 ? {
                     name: chatbotInfo.name,
-                    description: chatbotInfo.description,
+                    description: chatbotInfo.description as string | undefined,
                   }
                 : undefined
             }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
+import { globalEventEmitter } from "@/lib/event-emitter";
 
 /**
  * POST /api/chats/[id]/assign - Assign a chat to the current user (Pick Up Chat)
@@ -120,6 +121,21 @@ export async function POST(
     });
 
     console.log(`✅ Chat ${chatId} assigned to user ${user.email}`);
+
+    // Broadcast agent_joined event to customer via real-time channel
+    const agentJoinedPayload = {
+      type: "broadcast",
+      event: "agent_joined",
+      payload: {
+        agentId: user.id,
+        agentName: user.name || user.email || "Support Agent",
+        timestamp: new Date(),
+      },
+    };
+
+    globalEventEmitter.emit(`chat:${chatId}:agent_joined`, agentJoinedPayload);
+
+    console.log(`📢 Broadcasted agent_joined event for chat:${chatId}`);
 
     return NextResponse.json({
       success: true,

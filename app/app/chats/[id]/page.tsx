@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/shadcn/ui/button";
 import { Badge } from "@/components/shadcn/ui/badge";
@@ -22,7 +22,7 @@ import {
   UserCheck,
   UserX,
 } from "lucide-react";
-import { TraditionalChatInterface } from "@/components/chat/TraditionalChatInterface";
+import { UniversalChatInterface } from "@/components/chat/UniversalChatInterface";
 import { VectorSearchResult } from "@/lib/vector-db";
 
 interface TraditionalChat {
@@ -75,9 +75,16 @@ export default function ChatDetailPage() {
   useEffect(() => {
     const fetchChat = async () => {
       try {
+        console.log("[ChatDetailPage] Fetching chat:", chatId);
         const response = await fetch(`/api/chats/${chatId}`);
         if (response.ok) {
           const data = await response.json();
+          console.log("[ChatDetailPage] Chat data loaded:", {
+            chatId: data.id,
+            escalationRequested: data.escalationRequested,
+            assignedToId: data.assignedToId,
+            messageCount: data._count?.messages,
+          });
           setChat(data);
         } else {
           console.error("Failed to fetch chat");
@@ -93,6 +100,7 @@ export default function ChatDetailPage() {
   }, [chatId]);
 
   const handlePickUpChat = async () => {
+    console.log("[ChatDetailPage] Picking up chat:", chatId);
     setAssigningChat(true);
     try {
       const response = await fetch(`/api/chats/${chatId}/assign`, {
@@ -101,7 +109,30 @@ export default function ChatDetailPage() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log("[ChatDetailPage] Chat assigned successfully:", {
+          chatId: data.chat.id,
+          assignedToId: data.chat.assignedToId,
+          assignedAt: data.chat.assignedAt,
+        });
         setChat(data.chat);
+
+        // Broadcast agent_joined event via Supabase Realtime
+        const { supabase } = await import("@/lib/supabase");
+        const channel = supabase.channel(`chat:${chatId}`);
+
+        channel.send({
+          type: "broadcast",
+          event: "agent_joined",
+          payload: {
+            agentId: data.chat.assignedToId,
+            agentName: data.chat.assignedTo?.name || "Support Agent",
+            timestamp: new Date(),
+          },
+        });
+
+        console.log(
+          "📢 [Client] Broadcasted agent_joined via Supabase Realtime"
+        );
       } else {
         const error = await response.json();
         alert(error.error || "Failed to assign chat");
@@ -135,6 +166,45 @@ export default function ChatDetailPage() {
       setAssigningChat(false);
     }
   };
+
+  // Memoize chat config to prevent infinite re-renders
+
+  const chatConfig = useMemo(() => {
+    if (!chat) return null;
+
+    console.log("[ChatDetailPage] Creating chat config:", {
+      chatId: chat.id,
+      escalationRequested: chat.escalationRequested,
+      assignedToId: chat.assignedToId,
+      realtimeMode: chat.escalationRequested,
+    });
+
+    return {
+      apiEndpoint: "/api/chats",
+      type: "traditional" as const,
+      chatId: chat.id,
+      title: chat.escalationRequested ? "Live Support Chat" : "Support Chat",
+      placeholder: chat.escalationRequested
+        ? "Type your response to customer..."
+        : "Type your response as support agent...",
+      className: "h-full",
+      features: {
+        streaming: false,
+        escalation: false, // Agents don't need escalation button
+        debugMode: false,
+        contextBlocks: false,
+        multiChat: false,
+        supportView: true, // This is the agent view
+        realtimeMode: chat.escalationRequested, // Enable real-time for escalated chats
+        showBranding: false,
+        showSources: false,
+        showTokens: false,
+        showStatus: true,
+        showPriority: true,
+        showAssignedTo: true,
+      },
+    };
+  }, [chat?.id, chat?.escalationRequested]); // Only recreate when these specific values change
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -262,11 +332,9 @@ export default function ChatDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4">
         {/* Left Column - Chat Interface */}
         <div className="min-h-[calc(100vh-200px)]">
-          <TraditionalChatInterface
-            chatId={chat.id}
-            className="h-full"
-            isSupportView={true}
-          />
+          {chatConfig && (
+            <UniversalChatInterface key={chat.id} config={chatConfig} />
+          )}
         </div>
 
         {/* Right Column - Information Cards */}

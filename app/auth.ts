@@ -19,4 +19,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // JWT configuration for middleware compatibility
     maxAge: 30 * 24 * 60 * 60, // 30 days
   },
+  callbacks: {
+    async session({ session, token }) {
+      session.user.id = token.sub as string;
+      return session;
+    },
+  },
 });

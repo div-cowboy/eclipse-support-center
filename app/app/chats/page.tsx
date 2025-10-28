@@ -69,6 +69,9 @@ export default function ChatsPage() {
   const router = useRouter();
   const [chats, setChats] = useState<TraditionalChat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<"all" | "needs_response" | "my_chats">(
+    "all"
+  );
 
   useEffect(() => {
     const fetchChats = async () => {
@@ -89,6 +92,31 @@ export default function ChatsPage() {
 
     fetchChats();
   }, []);
+
+  // Filter and sort chats
+  const filteredChats = chats
+    .filter((chat) => {
+      if (filter === "needs_response") {
+        return chat.escalationRequested && !chat.assignedToId;
+      }
+      if (filter === "my_chats") {
+        // Note: You'd need to compare with current user's ID
+        // For now, just show assigned chats
+        return !!chat.assignedToId;
+      }
+      return true; // "all"
+    })
+    .sort((a, b) => {
+      // Sort unassigned escalated chats to the top
+      const aUrgent = a.escalationRequested && !a.assignedToId;
+      const bUrgent = b.escalationRequested && !b.assignedToId;
+
+      if (aUrgent && !bUrgent) return -1;
+      if (!aUrgent && bUrgent) return 1;
+
+      // Then sort by most recent
+      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+    });
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -127,6 +155,20 @@ export default function ChatsPage() {
     return `${month} ${day}, ${year} ${hours}:${minutes}`;
   };
 
+  const getTimeSince = (date: Date) => {
+    const now = new Date().getTime();
+    const then = new Date(date).getTime();
+    const diff = now - then;
+
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(diff / 3600000);
+    const days = Math.floor(diff / 86400000);
+
+    if (days > 0) return `${days}d`;
+    if (hours > 0) return `${hours}h`;
+    return `${minutes}m`;
+  };
+
   const handleViewChat = (chatId: string) => {
     // For now, we'll open in a new tab. Later we can implement a modal or side panel
     window.open(`/app/chats/${chatId}`, "_blank");
@@ -145,6 +187,11 @@ export default function ChatsPage() {
     );
   }
 
+  // Count escalations needing response
+  const needsResponseCount = chats.filter(
+    (chat) => chat.escalationRequested && !chat.assignedToId
+  ).length;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -161,6 +208,49 @@ export default function ChatsPage() {
         </Button>
       </div>
 
+      {/* Filter tabs */}
+      <div className="flex items-center gap-2">
+        <Button
+          variant={filter === "all" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setFilter("all")}
+        >
+          All Chats
+          <Badge variant="secondary" className="ml-2">
+            {chats.length}
+          </Badge>
+        </Button>
+        <Button
+          variant={filter === "needs_response" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setFilter("needs_response")}
+          className={
+            needsResponseCount > 0
+              ? "border-amber-400 text-amber-700 dark:border-amber-600 dark:text-amber-300"
+              : ""
+          }
+        >
+          <AlertCircle className="h-4 w-4 mr-2" />
+          Needs Response
+          {needsResponseCount > 0 && (
+            <Badge
+              variant="destructive"
+              className="ml-2 bg-amber-500 hover:bg-amber-600"
+            >
+              {needsResponseCount}
+            </Badge>
+          )}
+        </Button>
+        <Button
+          variant={filter === "my_chats" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setFilter("my_chats")}
+        >
+          <UserCheck className="h-4 w-4 mr-2" />
+          Assigned Chats
+        </Button>
+      </div>
+
       <Card>
         {/* <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -172,7 +262,7 @@ export default function ChatsPage() {
           </CardDescription>
         </CardHeader> */}
         <CardContent className="pt-6">
-          {chats.length === 0 ? (
+          {filteredChats.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="rounded-full bg-muted p-6 mb-4">
                 <MessageSquare className="h-12 w-12 text-muted-foreground" />
@@ -204,123 +294,146 @@ export default function ChatsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {chats.map((chat) => (
-                  <TableRow
-                    key={chat.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleViewChat(chat.id)}
-                  >
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(chat.status)}
-                        <Badge
-                          variant="outline"
-                          className={`text-xs ${getStatusColor(chat.status)}`}
-                        >
-                          {chat.status}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div>
-                        <div className="font-medium">{chat.title}</div>
-                        {/* {chat.description && (
+                {filteredChats.map((chat) => {
+                  const isUrgent =
+                    chat.escalationRequested && !chat.assignedToId;
+                  return (
+                    <TableRow
+                      key={chat.id}
+                      className={`cursor-pointer hover:bg-muted/50 ${
+                        isUrgent
+                          ? "bg-amber-50 dark:bg-amber-950/20 border-l-4 border-amber-500"
+                          : ""
+                      }`}
+                      onClick={() => handleViewChat(chat.id)}
+                    >
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          {getStatusIcon(chat.status)}
+                          <Badge
+                            variant="outline"
+                            className={`text-xs ${getStatusColor(chat.status)}`}
+                          >
+                            {chat.status}
+                          </Badge>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div>
+                          <div className="font-medium">{chat.title}</div>
+                          {/* {chat.description && (
                           <div className="text-sm text-muted-foreground truncate max-w-xs">
                             {chat.description}
                           </div>
                         )} */}
-                        {chat.chatbot && (
-                          <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                            <Bot className="h-3 w-3" />
-                            {chat.chatbot.name}
-                          </div>
+                          {chat.chatbot && (
+                            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                              <Bot className="h-3 w-3" />
+                              {chat.chatbot.name}
+                            </div>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {chat.chatbot?.organization ? (
+                          <Badge variant="secondary" className="text-xs">
+                            <Building2 className="h-3 w-3 mr-1" />
+                            {chat.chatbot.organization.name}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            -
+                          </span>
                         )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {chat.chatbot?.organization ? (
-                        <Badge variant="secondary" className="text-xs">
-                          <Building2 className="h-3 w-3 mr-1" />
-                          {chat.chatbot.organization.name}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {chat.escalationRequested ? (
-                        <Badge
-                          variant="outline"
-                          className="text-xs bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-800"
-                        >
-                          <PhoneCall className="h-3 w-3 mr-1" />
-                          Support Requested
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {chat.assignedTo ? (
-                        <Badge
-                          variant="outline"
-                          className="text-xs bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
-                        >
-                          <UserCheck className="h-3 w-3 mr-1" />
-                          {chat.assignedTo.name || chat.assignedTo.email}
-                        </Badge>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          Unassigned
-                        </span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className="text-xs">
-                        {chat._count?.messages || 0} messages
-                      </Badge>
-                    </TableCell>
-                    <TableCell
-                      className="text-sm text-muted-foreground"
-                      suppressHydrationWarning
-                    >
-                      {formatDate(chat.createdAt)}
-                    </TableCell>
-                    <TableCell
-                      className="text-sm text-muted-foreground"
-                      suppressHydrationWarning
-                    >
-                      {formatDate(chat.updatedAt)}
-                    </TableCell>
-                    <TableCell
-                      className="text-right"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem
-                            onClick={() => handleViewChat(chat.id)}
+                      </TableCell>
+                      <TableCell>
+                        {chat.escalationRequested ? (
+                          <div className="flex flex-col gap-1">
+                            <Badge
+                              variant="outline"
+                              className={`text-xs ${
+                                isUrgent
+                                  ? "bg-amber-100 text-amber-800 border-amber-400 font-semibold dark:bg-amber-900 dark:text-amber-200 dark:border-amber-600"
+                                  : "bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
+                              }`}
+                            >
+                              <PhoneCall className="h-3 w-3 mr-1" />
+                              {isUrgent ? "🚨 Urgent" : "Escalated"}
+                            </Badge>
+                            {chat.escalationRequestedAt && (
+                              <span className="text-xs text-muted-foreground">
+                                {getTimeSince(chat.escalationRequestedAt)} ago
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            -
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {chat.assignedTo ? (
+                          <Badge
+                            variant="outline"
+                            className="text-xs bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
                           >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Chat
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem>Archive</DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                            <UserCheck className="h-3 w-3 mr-1" />
+                            {chat.assignedTo.name || chat.assignedTo.email}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            Unassigned
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="secondary" className="text-xs">
+                          {chat._count?.messages || 0} messages
+                        </Badge>
+                      </TableCell>
+                      <TableCell
+                        className="text-sm text-muted-foreground"
+                        suppressHydrationWarning
+                      >
+                        {formatDate(chat.createdAt)}
+                      </TableCell>
+                      <TableCell
+                        className="text-sm text-muted-foreground"
+                        suppressHydrationWarning
+                      >
+                        {formatDate(chat.updatedAt)}
+                      </TableCell>
+                      <TableCell
+                        className="text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <span className="sr-only">Open menu</span>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuItem
+                              onClick={() => handleViewChat(chat.id)}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View Chat
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem>Archive</DropdownMenuItem>
+                            <DropdownMenuItem className="text-red-600">
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )}
