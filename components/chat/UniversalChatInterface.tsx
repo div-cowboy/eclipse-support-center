@@ -35,6 +35,7 @@ interface ChatMessage {
   role: "user" | "assistant" | "agent" | "system";
   content: string;
   timestamp: Date;
+  userId?: string; // ID of the user who sent this message
   metadata?: {
     // Organization/Chatbot chat metadata
     sources?: Array<{
@@ -71,6 +72,7 @@ export interface ChatConfig {
   organizationId?: string;
   chatbotId?: string;
   chatId?: string;
+  currentUserId?: string; // ID of the current user viewing the chat
 
   // UI Configuration
   title?: string;
@@ -170,6 +172,7 @@ export function UniversalChatInterface({
         role: message.role,
         content: message.content,
         timestamp: new Date(message.timestamp),
+        userId: message.sender.id, // Include sender ID for message alignment
       };
 
       setMessages((prev) => {
@@ -328,6 +331,7 @@ export function UniversalChatInterface({
         role: messageRole === "ASSISTANT" ? "assistant" : "user",
         content: message,
         timestamp: new Date(),
+        userId: config.currentUserId, // Include current user ID for message alignment
       };
       setMessages((prev) => [...prev, optimisticMessage]);
 
@@ -713,7 +717,7 @@ export function UniversalChatInterface({
 
   // Apply custom styling
   const containerStyle: React.CSSProperties = {
-    height: config.height || "600px",
+    ...(config.height && { height: config.height }),
     ...(config.styling?.fontFamily && {
       fontFamily: config.styling.fontFamily,
     }),
@@ -875,6 +879,18 @@ export function UniversalChatInterface({
                 new Date(message.timestamp) >= new Date(chatInfo.assignedAt) &&
                 !messages.slice(0, index).some((m) => m.role === "assistant");
 
+              // Determine if this message is from the current user
+              // Use userId comparison if available, otherwise fall back to role-based logic
+              const isOwnMessage =
+                config.currentUserId && message.userId
+                  ? message.userId === config.currentUserId
+                  : config.features.supportView
+                  ? // In support view, only post-assignment assistant messages are "own"
+                    message.role === "assistant" &&
+                    chatInfo?.assignedAt &&
+                    new Date(message.timestamp) >= new Date(chatInfo.assignedAt)
+                  : message.role === "user"; // In customer view, user messages are "own"
+
               return (
                 <div key={message.id}>
                   {/* Handoff banner */}
@@ -891,14 +907,19 @@ export function UniversalChatInterface({
 
                   <div
                     className={`flex gap-3 ${
-                      message.role === "user" ? "justify-end" : "justify-start"
+                      isOwnMessage ? "justify-end" : "justify-start"
                     }`}
                   >
-                    {/* Avatar for assistant messages */}
-                    {message.role === "assistant" && (
+                    {/* Avatar for other people's messages (not own messages) */}
+                    {!isOwnMessage && message.role !== "system" && (
                       <div className="flex-shrink-0">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Bot className="h-4 w-4 text-primary" />
+                          {message.role === "assistant" ||
+                          message.role === "agent" ? (
+                            <Bot className="h-4 w-4 text-primary" />
+                          ) : (
+                            <User className="h-4 w-4 text-primary" />
+                          )}
                         </div>
                       </div>
                     )}
@@ -908,22 +929,52 @@ export function UniversalChatInterface({
                       {config.type === "traditional" && (
                         <span
                           className={`text-xs text-muted-foreground px-1 ${
-                            message.role === "user" ? "text-left" : "text-right"
+                            isOwnMessage ? "text-right" : "text-left"
                           }`}
                         >
-                          {message.role === "user"
-                            ? "Customer"
-                            : message.role === "agent"
-                            ? "AI Agent"
-                            : message.role === "assistant"
-                            ? chatInfo?.assignedTo?.name || "Support Agent"
-                            : "System"}
+                          {(() => {
+                            // Determine sender label based on role and context
+                            if (isOwnMessage) {
+                              return "You";
+                            }
+
+                            // For customer messages
+                            if (message.role === "user") {
+                              return config.features.supportView
+                                ? "Customer"
+                                : "You";
+                            }
+
+                            // For AI agent/bot messages
+                            if (message.role === "agent") {
+                              return "AI Agent";
+                            }
+
+                            // For assistant messages - distinguish between bot and human agent
+                            if (message.role === "assistant") {
+                              // If chat is assigned and message is after assignment, it's from human agent
+                              if (
+                                chatInfo?.assignedAt &&
+                                new Date(message.timestamp) >=
+                                  new Date(chatInfo.assignedAt)
+                              ) {
+                                return (
+                                  chatInfo?.assignedTo?.name || "Support Agent"
+                                );
+                              }
+                              // Otherwise it's from the AI bot
+                              return "AI Assistant";
+                            }
+
+                            // System messages
+                            return "System";
+                          })()}
                         </span>
                       )}
 
                       <div
                         className={`rounded-lg px-3 py-2 ${
-                          message.role === "user"
+                          isOwnMessage
                             ? "bg-primary text-primary-foreground"
                             : message.role === "system"
                             ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
@@ -1051,8 +1102,8 @@ export function UniversalChatInterface({
                       </div>
                     </div>
 
-                    {/* Avatar for user messages */}
-                    {message.role === "user" && (
+                    {/* Avatar for own messages */}
+                    {isOwnMessage && (
                       <div className="flex-shrink-0">
                         <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
                           <User className="h-4 w-4 text-primary-foreground" />

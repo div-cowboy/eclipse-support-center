@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useRouter, useParams } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { Button } from "@/components/shadcn/ui/button";
 import { Badge } from "@/components/shadcn/ui/badge";
 import {
@@ -68,6 +69,7 @@ export default function ChatDetailPage() {
   const router = useRouter();
   const params = useParams();
   const chatId = params.id as string;
+  const { data: session } = useSession();
   const [chat, setChat] = useState<TraditionalChat | null>(null);
   const [loading, setLoading] = useState(true);
   const [assigningChat, setAssigningChat] = useState(false);
@@ -183,6 +185,7 @@ export default function ChatDetailPage() {
       apiEndpoint: "/api/chats",
       type: "traditional" as const,
       chatId: chat.id,
+      currentUserId: session?.user?.id, // Pass current user ID for message alignment
       title: chat.escalationRequested ? "Live Support Chat" : "Support Chat",
       placeholder: chat.escalationRequested
         ? "Type your response to customer..."
@@ -204,7 +207,7 @@ export default function ChatDetailPage() {
         showAssignedTo: true,
       },
     };
-  }, [chat?.id, chat?.escalationRequested]); // Only recreate when these specific values change
+  }, [chat, session?.user?.id]); // Recreate when chat or user changes
 
   const getStatusIcon = (status: string) => {
     switch (status) {

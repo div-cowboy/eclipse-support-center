@@ -47,7 +47,7 @@ function EmbedChatContent() {
     theme: (searchParams.get("theme") as "light" | "dark" | "auto") || "auto",
     primaryColor: searchParams.get("primaryColor") || undefined,
     borderRadius: searchParams.get("borderRadius") || "8px",
-    height: searchParams.get("height") || "600px",
+    // height: searchParams.get("height") || "600px",
     width: searchParams.get("width") || "100%",
     showBranding: searchParams.get("showBranding") !== "false",
     welcomeMessage: searchParams.get("welcomeMessage") || undefined,
