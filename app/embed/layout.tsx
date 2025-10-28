@@ -24,9 +24,9 @@ export default function EmbedLayout({
         /* Add your global embed styles here */
 
         /* Example: Remove margins/padding */
-        svg {
+        /* svg {
           display: none;
-        }
+        } */
 
         /* Add more global styles as needed */
       `}</style>

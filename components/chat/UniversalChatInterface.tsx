@@ -882,7 +882,7 @@ export function UniversalChatInterface({
                     <div className="flex items-center justify-center py-4">
                       <div className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-full">
                         <PhoneCall className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        <span className="text-sm font-medium text-green-900 dark:text-green-100">
+                        <span className="text-sm font-medium text-green-600 dark:text-green-100">
                           Chat transferred to human support
                         </span>
                       </div>
@@ -1042,7 +1042,7 @@ export function UniversalChatInterface({
                             message.role === "agent"
                               ? "text-blue-100"
                               : message.role === "assistant"
-                              ? "text-green-100"
+                              ? "text-gray-400"
                               : "opacity-70"
                           }`}
                         >
