@@ -8,6 +8,7 @@ import {
   saveChatSession,
   updateChatSession,
   isStorageAvailable,
+  markChatAsViewed,
 } from "@/lib/embed-chat-storage";
 import type { ChatConfig } from "@/components/chat/UniversalChatInterface";
 
@@ -62,6 +63,13 @@ function EmbedChatContent() {
     setStorageAvailable(isStorageAvailable());
   }, []);
 
+  // Mark chat as viewed when chatId changes (including initial load)
+  useEffect(() => {
+    if (storageAvailable && chatId && view === "chat") {
+      markChatAsViewed(chatId);
+    }
+  }, [storageAvailable, chatId, view]);
+
   // Load chatbot info on mount
   useEffect(() => {
     const loadChatbotInfo = async () => {
@@ -82,13 +90,40 @@ function EmbedChatContent() {
   }, [config.chatbotId]);
 
   // Navigation handlers (useCallback to prevent recreating on every render)
-  const handleSelectChat = useCallback((selectedChatId: string) => {
-    setChatId(selectedChatId);
-    setView("chat");
-  }, []);
+  const handleSelectChat = useCallback(
+    async (selectedChatId: string) => {
+      setChatId(selectedChatId);
+      setView("chat");
+
+      // Mark chat as viewed when opening it
+      if (storageAvailable) {
+        markChatAsViewed(selectedChatId);
+      }
+
+      // Check if this chat is already escalated
+      try {
+        const response = await fetch(`/api/embed/chats/${selectedChatId}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.escalationRequested) {
+            setIsEscalated(true);
+            console.log(
+              "[EmbedChat] Loaded escalated chat, setting isEscalated to true"
+            );
+          } else {
+            setIsEscalated(false);
+          }
+        }
+      } catch (error) {
+        console.error("Error checking chat escalation status:", error);
+      }
+    },
+    [storageAvailable]
+  );
 
   const handleNewChat = useCallback(() => {
     setChatId(null);
+    setIsEscalated(false); // Reset escalation state for new chat
     setView("chat");
   }, []);
 
@@ -153,13 +188,41 @@ function EmbedChatContent() {
 
     // Update chat session in localStorage after successful message
     if (storageAvailable && chatId && config.chatbotId) {
+      const now = new Date().toISOString();
       updateChatSession(chatId, {
-        lastMessageAt: new Date().toISOString(),
+        lastMessageAt: now,
         messageCount: 1, // This will be incremented by the backend
         preview: "Recent message",
+        // Mark as viewed since user is actively in the chat
+        lastViewedAt: now,
       });
     }
   }, [chatId, isEscalated, storageAvailable, config.chatbotId]);
+
+  const handleMessageReceived = useCallback(() => {
+    console.log("[EmbedChat] Message received:", { chatId, isEscalated, view });
+
+    // Update chat session in localStorage when AI/agent responds
+    if (storageAvailable && chatId && config.chatbotId) {
+      const now = new Date().toISOString();
+
+      // If user is actively viewing this chat, mark as viewed
+      // Otherwise, only update lastMessageAt (will show as unread)
+      if (view === "chat") {
+        updateChatSession(chatId, {
+          lastMessageAt: now,
+          preview: "New message received",
+          lastViewedAt: now, // Mark as viewed since user is watching
+        });
+      } else {
+        updateChatSession(chatId, {
+          lastMessageAt: now,
+          preview: "New message received",
+          // Don't update lastViewedAt - user isn't viewing this chat
+        });
+      }
+    }
+  }, [chatId, isEscalated, storageAvailable, config.chatbotId, view]);
 
   // Log current state for debugging
   useEffect(() => {
@@ -194,7 +257,7 @@ function EmbedChatContent() {
       className: "h-full border-0 shadow-none",
       features: {
         streaming: true,
-        escalation: !isEscalated, // Disable escalation button once escalated
+        escalation: !isEscalated, // Hide escalation button once escalated
         multiChat: storageAvailable,
         realtimeMode: isEscalated && !!chatId, // Enable real-time mode after escalation
         showBranding: config.showBranding,
@@ -211,6 +274,7 @@ function EmbedChatContent() {
       onChatCreated: handleChatCreated,
       onEscalationRequested: handleEscalationRequested,
       onMessageSent: handleMessageSent,
+      onMessageReceived: handleMessageReceived,
       onBackToList: handleBackToList,
     };
   }, [
@@ -232,6 +296,7 @@ function EmbedChatContent() {
     handleChatCreated,
     handleEscalationRequested,
     handleMessageSent,
+    handleMessageReceived,
     handleBackToList,
   ]);
 

@@ -112,6 +112,7 @@ export interface ChatConfig {
   onChatCreated?: (chatId: string) => void;
   onEscalationRequested?: (reason: string) => void;
   onMessageSent?: (message: ChatMessage) => void;
+  onMessageReceived?: (message: ChatMessage) => void;
   onBackToList?: () => void;
 }
 
@@ -127,11 +128,14 @@ export function UniversalChatInterface({
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false); // Loading existing chat
 
   // Escalation state
   const [escalationRequested, setEscalationRequested] = useState(false);
   const [escalationReason, setEscalationReason] = useState<string>("");
-  const [escalationActivated, setEscalationActivated] = useState(false);
+  const [escalationActivated, setEscalationActivated] = useState(
+    config.features.realtimeMode || false // If realtimeMode is enabled in config, escalation is active
+  );
   const [awaitingSupport, setAwaitingSupport] = useState(false);
 
   // Real-time chat state
@@ -191,6 +195,14 @@ export function UniversalChatInterface({
             !msg.id.startsWith("optimistic_") || msg.content !== message.content
         );
 
+        // Notify parent of received message if it's from assistant/agent (not our own message)
+        if (
+          (chatMessage.role === "assistant" || chatMessage.role === "agent") &&
+          config.onMessageReceived
+        ) {
+          config.onMessageReceived(chatMessage);
+        }
+
         return [...withoutOptimistic, chatMessage];
       });
     },
@@ -236,6 +248,7 @@ export function UniversalChatInterface({
         config.chatbotId
       ) {
         try {
+          // Load chatbot info
           const endpoint =
             config.type === "embed"
               ? `/api/embed/chatbots/${config.chatbotId}`
@@ -245,10 +258,56 @@ export function UniversalChatInterface({
             const data = await response.json();
             setChatInfo(data);
           }
+
+          // For embed chats with chatId, also load existing messages
+          if (config.type === "embed" && config.chatId) {
+            setIsLoadingHistory(true); // Start loading
+            try {
+              const chatResponse = await fetch(
+                `/api/embed/chats/${config.chatId}`
+              );
+              if (chatResponse.ok) {
+                const chatData = await chatResponse.json();
+                // Map database message roles to frontend format
+                const mappedMessages = (chatData.messages || []).map(
+                  (msg: {
+                    role: string;
+                    createdAt: string;
+                    userId?: string;
+                    [key: string]: unknown;
+                  }) => ({
+                    ...msg,
+                    role: msg.role.toLowerCase() as
+                      | "user"
+                      | "assistant"
+                      | "agent"
+                      | "system",
+                    timestamp: new Date(msg.createdAt),
+                    userId: msg.userId,
+                  })
+                );
+                setMessages(mappedMessages);
+
+                // Update chat info with escalation status
+                if (chatData.escalationRequested) {
+                  setEscalationRequested(true);
+                  setEscalationReason(chatData.escalationReason || "");
+                  setEscalationActivated(true);
+                  // Enable real-time mode if chat is escalated
+                  setRealtimeMode(true);
+                }
+              }
+            } catch (error) {
+              console.error("Error loading embed chat messages:", error);
+            } finally {
+              setIsLoadingHistory(false); // Done loading
+            }
+          }
         } catch (error) {
           console.error("Error loading chatbot info:", error);
         }
       } else if (config.type === "traditional" && config.chatId) {
+        setIsLoadingHistory(true); // Start loading
         try {
           const response = await fetch(`/api/chats/${config.chatId}`);
           if (response.ok) {
@@ -271,9 +330,23 @@ export function UniversalChatInterface({
               })
             );
             setMessages(mappedMessages);
+
+            // Update escalation status if chat is already escalated
+            if (data.escalationRequested) {
+              setEscalationRequested(true);
+              setEscalationReason(data.escalationReason || "");
+              setEscalationActivated(true); // Set escalation as activated
+              // Enable real-time mode if chat is escalated
+              setRealtimeMode(true);
+              console.log(
+                "[UniversalChatInterface] Traditional chat is escalated, activating real-time mode"
+              );
+            }
           }
         } catch (error) {
           console.error("Error loading chat info:", error);
+        } finally {
+          setIsLoadingHistory(false); // Done loading
         }
       }
     };
@@ -281,9 +354,15 @@ export function UniversalChatInterface({
     loadChatInfo();
   }, [config.type, config.chatbotId, config.chatId]);
 
-  // Show welcome message
+  // Show welcome message (only for NEW chats, not when loading existing chat)
   useEffect(() => {
-    if (config.welcomeMessage && !hasShownWelcome && messages.length === 0) {
+    if (
+      config.welcomeMessage &&
+      !hasShownWelcome &&
+      messages.length === 0 &&
+      !config.chatId && // Only show for new chats
+      !isLoadingHistory // Not while loading existing chat
+    ) {
       const welcomeMessage: ChatMessage = {
         id: `welcome_${Date.now()}`,
         role: "assistant",
@@ -293,7 +372,13 @@ export function UniversalChatInterface({
       setMessages([welcomeMessage]);
       setHasShownWelcome(true);
     }
-  }, [config.welcomeMessage, hasShownWelcome, messages.length]);
+  }, [
+    config.welcomeMessage,
+    hasShownWelcome,
+    messages.length,
+    config.chatId,
+    isLoadingHistory,
+  ]);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -486,6 +571,11 @@ export function UniversalChatInterface({
               if (assistantMessage) {
                 assistantMessage.content = fullContent;
                 setMessages((prev) => [...prev, assistantMessage!]);
+
+                // Notify parent of received message (for localStorage updates in embed mode)
+                if (config.onMessageReceived) {
+                  config.onMessageReceived(assistantMessage);
+                }
               }
               break;
             }
@@ -562,6 +652,11 @@ export function UniversalChatInterface({
         },
       };
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Notify parent of received message (for localStorage updates in embed mode)
+      if (config.onMessageReceived) {
+        config.onMessageReceived(assistantMessage);
+      }
 
       // Update chat info for new chats
       if (data.chatId && config.onChatCreated) {
@@ -852,7 +947,24 @@ export function UniversalChatInterface({
         <CardContent className="flex-1 flex flex-col p-0">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {messages.length === 0 && !chatInfo && (
+            {/* Loading existing chat history */}
+            {isLoadingHistory && messages.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <div className="relative mb-4">
+                  <MessageSquare className="h-12 w-12 text-muted-foreground animate-pulse" />
+                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full animate-bounce" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">
+                  Loading conversation...
+                </h3>
+                <p className="text-muted-foreground max-w-sm">
+                  Fetching your chat history
+                </p>
+              </div>
+            )}
+
+            {/* Empty state (only for new chats when not loading) */}
+            {!isLoadingHistory && messages.length === 0 && !chatInfo && (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-semibold mb-2">
@@ -1115,8 +1227,8 @@ export function UniversalChatInterface({
               );
             })}
 
-            {/* Streaming message */}
-            {isStreaming && streamingContent && (
+            {/* Streaming message (only show for AI, not after escalation) */}
+            {isStreaming && streamingContent && !escalationActivated && (
               <div className="flex gap-3 justify-start">
                 <div className="flex-shrink-0">
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
@@ -1132,8 +1244,10 @@ export function UniversalChatInterface({
               </div>
             )}
 
-            {/* Typing indicator */}
-            {isLoading && !isStreaming && <TypingIndicator />}
+            {/* Typing indicator (only show for AI, not after escalation) */}
+            {isLoading && !isStreaming && !escalationActivated && (
+              <TypingIndicator />
+            )}
 
             <div ref={messagesEndRef} />
           </div>

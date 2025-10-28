@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/shadcn/ui/button";
 import {
   Card,
@@ -9,12 +9,15 @@ import {
   CardTitle,
 } from "@/components/shadcn/ui/card";
 import { Badge } from "@/components/shadcn/ui/badge";
-import { MessageSquare, Plus, Trash2, Clock, Bot } from "lucide-react";
+import { MessageSquare, Plus, Trash2, Clock, Bot, Circle } from "lucide-react";
 import {
   getChatSessions,
   deleteChatSession,
+  updateChatSession,
   type ChatSession,
 } from "@/lib/embed-chat-storage";
+import { useRealtimeChatList } from "../hooks/useRealtimeChatList";
+import type { ChatListMessage } from "../hooks/useRealtimeChatList";
 
 interface EmbedChatsListProps {
   chatbotId: string;
@@ -35,14 +38,68 @@ export function EmbedChatsList({
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  useEffect(() => {
-    loadSessions();
+  const loadSessions = useCallback(() => {
+    const chatSessions = getChatSessions(chatbotId);
+
+    // Calculate unread status for each session
+    const sessionsWithUnread = chatSessions.map((session) => {
+      // If never viewed, don't show as unread (they haven't interacted yet)
+      if (!session.lastViewedAt) {
+        return { ...session, unreadCount: 0 };
+      }
+
+      // Calculate if there are unread messages
+      const lastViewed = new Date(session.lastViewedAt);
+      const lastMessage = new Date(session.lastMessageAt);
+      const hasUnread = lastMessage > lastViewed;
+
+      return {
+        ...session,
+        unreadCount: hasUnread ? 1 : 0,
+      };
+    });
+
+    setSessions(sessionsWithUnread);
   }, [chatbotId]);
 
-  const loadSessions = () => {
-    const chatSessions = getChatSessions(chatbotId);
-    setSessions(chatSessions);
-  };
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
+
+  // Handle incoming messages from background chats
+  const handleBackgroundMessage = useCallback(
+    (message: ChatListMessage) => {
+      console.log("[EmbedChatsList] Background message received:", {
+        chatId: message.chatId,
+        role: message.role,
+        sender: message.senderName,
+      });
+
+      // Only track messages from assistant/agent (not user's own messages)
+      if (message.role === "assistant" || message.role === "agent") {
+        // Update localStorage with new message timestamp
+        updateChatSession(message.chatId, {
+          lastMessageAt: message.timestamp.toISOString(),
+          preview: `${message.senderName}: ${message.content.substring(
+            0,
+            50
+          )}...`,
+        });
+
+        // Reload sessions to update UI
+        loadSessions();
+      }
+    },
+    [loadSessions]
+  );
+
+  // Subscribe to real-time updates for all user's chats
+  const chatIds = sessions.map((s) => s.id);
+  useRealtimeChatList({
+    chatIds,
+    enabled: chatIds.length > 0,
+    onMessageReceived: handleBackgroundMessage,
+  });
 
   const handleDelete = (chatId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Prevent triggering onSelectChat
@@ -133,6 +190,15 @@ export function EmbedChatsList({
                         <Badge variant="secondary" className="text-xs">
                           {session.messageCount} msg
                         </Badge>
+                        {(session.unreadCount || 0) > 0 && (
+                          <Badge
+                            variant="destructive"
+                            className="text-xs flex items-center gap-1"
+                          >
+                            <Circle className="h-2 w-2 fill-current" />
+                            {session.unreadCount} new
+                          </Badge>
+                        )}
                       </div>
 
                       {session.preview && (
@@ -166,4 +232,3 @@ export function EmbedChatsList({
     </Card>
   );
 }
-

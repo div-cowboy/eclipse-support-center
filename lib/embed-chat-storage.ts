@@ -10,6 +10,8 @@ export interface ChatSession {
   lastMessageAt: string;
   messageCount: number;
   preview?: string; // Last message preview
+  lastViewedAt?: string; // When user last opened/viewed this chat
+  unreadCount?: number; // Number of unread messages
 }
 
 const STORAGE_KEY = "eclipse_embed_chats";
@@ -127,6 +129,53 @@ export function getMostRecentChat(chatbotId: string): ChatSession | null {
 }
 
 /**
+ * Mark a chat as viewed (updates lastViewedAt and clears unread count)
+ */
+export function markChatAsViewed(chatId: string): void {
+  const session = getChatSession(chatId);
+  if (session) {
+    saveChatSession({
+      ...session,
+      lastViewedAt: new Date().toISOString(),
+      unreadCount: 0,
+    });
+  }
+}
+
+/**
+ * Increment unread count for a chat (called when a new message arrives)
+ */
+export function incrementUnreadCount(chatId: string): void {
+  const session = getChatSession(chatId);
+  if (session) {
+    saveChatSession({
+      ...session,
+      unreadCount: (session.unreadCount || 0) + 1,
+    });
+  }
+}
+
+/**
+ * Calculate unread messages based on lastViewedAt and message timestamps
+ * This should be called when loading a chat to sync unread count
+ */
+export function calculateUnreadCount(
+  chatId: string,
+  latestMessageTime: string
+): number {
+  const session = getChatSession(chatId);
+  if (!session || !session.lastViewedAt) {
+    return 0; // If never viewed, don't show as unread
+  }
+
+  const lastViewed = new Date(session.lastViewedAt);
+  const latestMessage = new Date(latestMessageTime);
+
+  // If latest message is after last viewed, there are unread messages
+  return latestMessage > lastViewed ? 1 : 0;
+}
+
+/**
  * Check if localStorage is available
  */
 export function isStorageAvailable(): boolean {
@@ -139,4 +188,3 @@ export function isStorageAvailable(): boolean {
     return false;
   }
 }
-
