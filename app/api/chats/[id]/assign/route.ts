@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
 import { globalEventEmitter } from "@/lib/event-emitter";
+import { Redis } from "@upstash/redis";
 
 /**
  * POST /api/chats/[id]/assign - Assign a chat to the current user (Pick Up Chat)
@@ -124,16 +125,50 @@ export async function POST(
 
     // Broadcast agent_joined event to customer via real-time channel
     const agentJoinedPayload = {
-      type: "broadcast",
-      event: "agent_joined",
-      payload: {
+      type: "agent_joined",
+      data: {
         agentId: user.id,
         agentName: user.name || user.email || "Support Agent",
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
       },
+      timestamp: new Date().toISOString(),
     };
 
-    globalEventEmitter.emit(`chat:${chatId}:agent_joined`, agentJoinedPayload);
+    // Broadcast via Supabase (legacy)
+    globalEventEmitter.emit(`chat:${chatId}:agent_joined`, {
+      type: "broadcast",
+      event: "agent_joined",
+      payload: agentJoinedPayload.data,
+    });
+
+    // Also broadcast via WebSocket (if enabled)
+    const useWebSocket = process.env.NEXT_PUBLIC_USE_WEBSOCKET === "true";
+    if (
+      useWebSocket &&
+      process.env.UPSTASH_REDIS_REST_URL &&
+      process.env.UPSTASH_REDIS_REST_TOKEN
+    ) {
+      try {
+        const redis = new Redis({
+          url: process.env.UPSTASH_REDIS_REST_URL,
+          token: process.env.UPSTASH_REDIS_REST_TOKEN,
+        });
+
+        // Publish to Redis stream for WebSocket servers
+        await redis.lpush(
+          `stream:chat:${chatId}`,
+          JSON.stringify(agentJoinedPayload)
+        );
+        await redis.ltrim(`stream:chat:${chatId}`, 0, 99); // Keep only last 100 messages
+
+        console.log(
+          `📢 [WebSocket] Broadcasted agent_joined to Redis for chat:${chatId}`
+        );
+      } catch (error) {
+        console.error("Failed to broadcast agent_joined via WebSocket:", error);
+        // Don't fail the request if Redis broadcast fails
+      }
+    }
 
     console.log(`📢 Broadcasted agent_joined event for chat:${chatId}`);
 

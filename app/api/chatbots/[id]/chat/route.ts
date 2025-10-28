@@ -172,6 +172,21 @@ export async function POST(
         },
       });
 
+      // Update Chat record if escalation was requested
+      if (response.message.metadata?.escalationRequested) {
+        await prisma.chat.update({
+          where: { id: chat.id },
+          data: {
+            escalationRequested: true,
+            escalationReason:
+              response.message.metadata.escalationReason ||
+              "Customer requested human assistance",
+            escalationRequestedAt: new Date(),
+          },
+        });
+        console.log(`🚨 Escalation requested for chat: ${chat.id}`);
+      }
+
       console.log(`✅ Saved messages to chat: ${chat.id}`);
 
       return NextResponse.json({
@@ -291,6 +306,21 @@ async function handleStreamingResponse(
                 },
               },
             });
+
+            // Update Chat record if escalation was requested
+            if (escalationData.escalationRequested) {
+              await prisma.chat.update({
+                where: { id: chatId },
+                data: {
+                  escalationRequested: true,
+                  escalationReason:
+                    escalationData.escalationReason ||
+                    "Customer requested human assistance",
+                  escalationRequestedAt: new Date(),
+                },
+              });
+              console.log(`🚨 Escalation requested for chat: ${chatId}`);
+            }
 
             console.log(`✅ Saved streaming messages to chat: ${chatId}`);
 

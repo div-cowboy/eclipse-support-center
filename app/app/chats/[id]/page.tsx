@@ -118,22 +118,12 @@ export default function ChatDetailPage() {
         });
         setChat(data.chat);
 
-        // Broadcast agent_joined event via Supabase Realtime
-        const { supabase } = await import("@/lib/supabase");
-        const channel = supabase.channel(`chat:${chatId}`);
-
-        channel.send({
-          type: "broadcast",
-          event: "agent_joined",
-          payload: {
-            agentId: data.chat.assignedToId,
-            agentName: data.chat.assignedTo?.name || "Support Agent",
-            timestamp: new Date(),
-          },
-        });
-
+        // Agent joined broadcast is now handled server-side by the API
+        // The /api/chats/[id]/assign endpoint broadcasts to both:
+        // - Supabase Realtime (legacy)
+        // - Redis/WebSocket (new implementation)
         console.log(
-          "📢 [Client] Broadcasted agent_joined via Supabase Realtime"
+          "✅ [Client] Agent assignment complete - server broadcasting agent_joined event"
         );
       } else {
         const error = await response.json();

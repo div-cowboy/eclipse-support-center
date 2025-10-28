@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
 import { globalEventEmitter } from "@/lib/event-emitter";
+import { Redis } from "@upstash/redis";
 
 /**
  * POST /api/chats/[id]/messages/send
@@ -13,12 +14,19 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
-    const session = await auth();
     const chatId = params.id;
 
     // Get request body
     const body = await request.json();
-    const { content, role } = body;
+    const { content, role, userId } = body;
+
+    // Check for internal API authentication (from WebSocket server)
+    const internalSecret = request.headers.get("x-internal-secret");
+    const isInternalRequest =
+      internalSecret === process.env.INTERNAL_API_SECRET;
+
+    // Get session for regular user requests
+    const session = isInternalRequest ? null : await auth();
 
     if (!content || !content.trim()) {
       return NextResponse.json(
@@ -27,9 +35,9 @@ export async function POST(
       );
     }
 
-    if (!role || !["USER", "ASSISTANT"].includes(role)) {
+    if (!role || !["USER", "ASSISTANT", "AGENT"].includes(role)) {
       return NextResponse.json(
-        { error: "Valid role is required (USER or ASSISTANT)" },
+        { error: "Valid role is required (USER, ASSISTANT, or AGENT)" },
         { status: 400 }
       );
     }
@@ -60,34 +68,43 @@ export async function POST(
       );
     }
 
-    // For ASSISTANT role, verify user is the assigned agent
-    if (role === "ASSISTANT") {
-      if (!session?.user) {
+    // For ASSISTANT/AGENT role, verify authentication
+    if (role === "ASSISTANT" || role === "AGENT") {
+      // Allow internal requests from WebSocket server
+      if (!isInternalRequest && !session?.user) {
         return NextResponse.json(
           { error: "Authentication required for agent messages" },
           { status: 401 }
         );
       }
 
-      // Check if user is assigned to this chat or has agent role
-      const user = await prisma.user.findUnique({
-        where: { id: session.user.id },
-      });
+      // If not internal request, verify user exists
+      if (!isInternalRequest) {
+        const user = await prisma.user.findUnique({
+          where: { id: session!.user!.id },
+        });
 
-      // For now, allow any authenticated user to respond as agent
-      // In production, you might want stricter role checking
-      if (!user) {
-        return NextResponse.json({ error: "User not found" }, { status: 404 });
+        if (!user) {
+          return NextResponse.json(
+            { error: "User not found" },
+            { status: 404 }
+          );
+        }
       }
     }
 
     // Create message in database
+    // Use userId from body (for WebSocket server) or from session (for regular requests)
+    const messageUserId = isInternalRequest
+      ? userId
+      : session?.user?.id || null;
+
     const message = await prisma.message.create({
       data: {
         content: content.trim(),
         role: role,
         chatId: chatId,
-        userId: session?.user?.id || null,
+        userId: messageUserId,
       },
       include: {
         user: {
@@ -126,8 +143,41 @@ export async function POST(
       },
     };
 
-    // Broadcast to all subscribers on this chat channel
+    // Broadcast to all subscribers on this chat channel (Supabase/legacy)
     globalEventEmitter.emit(`chat:${chatId}:message`, broadcastPayload);
+
+    // Also broadcast via WebSocket (if enabled)
+    const useWebSocket = process.env.NEXT_PUBLIC_USE_WEBSOCKET === "true";
+    if (
+      useWebSocket &&
+      process.env.UPSTASH_REDIS_REST_URL &&
+      process.env.UPSTASH_REDIS_REST_TOKEN
+    ) {
+      try {
+        const redis = new Redis({
+          url: process.env.UPSTASH_REDIS_REST_URL,
+          token: process.env.UPSTASH_REDIS_REST_TOKEN,
+        });
+
+        // Prepare payload for WebSocket (different format than Supabase)
+        const wsPayload = {
+          type: "message",
+          data: broadcastPayload.payload,
+          timestamp: new Date().toISOString(),
+        };
+
+        // Publish to Redis stream for WebSocket servers
+        await redis.lpush(`stream:chat:${chatId}`, JSON.stringify(wsPayload));
+        await redis.ltrim(`stream:chat:${chatId}`, 0, 99); // Keep only last 100 messages
+
+        console.log(
+          `📢 [WebSocket] Broadcasted message to Redis for chat:${chatId}`
+        );
+      } catch (error) {
+        console.error("Failed to broadcast message via WebSocket:", error);
+        // Don't fail the request if Redis broadcast fails
+      }
+    }
 
     console.log(`[Real-time] Message sent to chat:${chatId}`, {
       messageId: message.id,
