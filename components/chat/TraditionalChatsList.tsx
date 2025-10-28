@@ -166,7 +166,7 @@ export function TraditionalChatsList({
             </CardHeader>
             <CardContent className="pt-0">
               <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>{chat._count.messages} messages</span>
+                <span>{chat._count?.messages || 0} messages</span>
                 <span>{formatDate(chat.updatedAt)}</span>
               </div>
             </CardContent>

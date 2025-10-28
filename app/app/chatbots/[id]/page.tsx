@@ -285,7 +285,9 @@ export default function ChatbotDetailPage() {
           <CardContent>
             <div className="flex items-center">
               <MessageSquare className="h-4 w-4 mr-2 text-muted-foreground" />
-              <span className="text-2xl font-bold">{chatbot._count.chats}</span>
+              <span className="text-2xl font-bold">
+                {chatbot._count?.chats || 0}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -300,7 +302,7 @@ export default function ChatbotDetailPage() {
             <div className="flex items-center">
               <FileText className="h-4 w-4 mr-2 text-muted-foreground" />
               <span className="text-2xl font-bold">
-                {chatbot._count.contextBlocks}
+                {chatbot._count?.contextBlocks || 0}
               </span>
             </div>
           </CardContent>

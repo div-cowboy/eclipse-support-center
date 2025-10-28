@@ -23,6 +23,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { EmbedChatsList } from "@/components/chat/EmbedChatsList";
+import { TypingIndicator } from "@/components/chat/TypingIndicator";
 import {
   saveChatSession,
   updateChatSession,
@@ -287,8 +288,8 @@ function EmbedChatContent() {
                   tokensUsed: parsed.tokensUsed,
                 };
               }
-              // Check for escalation in the response
-              if (parsed.escalationRequested) {
+              // Check for escalation in the response - only set when response is complete
+              if (parsed.isComplete && parsed.escalationRequested) {
                 assistantMessage.metadata = {
                   ...assistantMessage.metadata,
                   escalationRequested: parsed.escalationRequested,
@@ -589,6 +590,9 @@ function EmbedChatContent() {
                   </div>
                 </div>
               )}
+
+              {/* Typing indicator - only show when loading but not streaming */}
+              {isLoading && !isStreaming && <TypingIndicator />}
 
               <div ref={messagesEndRef} />
             </div>

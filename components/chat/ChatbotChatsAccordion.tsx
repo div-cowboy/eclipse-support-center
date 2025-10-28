@@ -154,7 +154,7 @@ function ChatbotAccordionItem({
             <div className="flex items-center space-x-4 text-sm text-muted-foreground">
               <div className="flex items-center space-x-1">
                 <MessageSquare className="h-4 w-4" />
-                <span>{chatbot._count.chats}</span>
+                <span>{chatbot._count?.chats || 0}</span>
               </div>
               <div
                 onClick={(e) => {
@@ -239,7 +239,7 @@ function ChatbotAccordionItem({
                     <div className="flex items-center space-x-3 text-xs text-muted-foreground">
                       <div className="flex items-center space-x-1">
                         <MessageSquare className="h-3 w-3" />
-                        <span>{chat._count.messages}</span>
+                        <span>{chat._count?.messages || 0}</span>
                       </div>
                       <div className="flex items-center space-x-1">
                         <Clock className="h-3 w-3" />

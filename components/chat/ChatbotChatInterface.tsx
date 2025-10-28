@@ -22,6 +22,7 @@ import {
   AlertCircle,
   PhoneCall,
 } from "lucide-react";
+import { TypingIndicator } from "./TypingIndicator";
 
 interface ChatMessage {
   id: string;
@@ -504,6 +505,9 @@ export function ChatbotChatInterface({
               </div>
             </div>
           )}
+
+          {/* Typing indicator - only show when loading but not streaming */}
+          {isLoading && !isStreaming && <TypingIndicator />}
 
           <div ref={messagesEndRef} />
         </div>

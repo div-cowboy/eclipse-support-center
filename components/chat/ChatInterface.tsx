@@ -11,7 +11,7 @@ import {
 } from "@/components/shadcn/ui/card";
 import { Badge } from "@/components/shadcn/ui/badge";
 import { Send, Bot, User, FileText } from "lucide-react";
-import { VectorSearchResult } from "@/lib/vector-db";
+import { TypingIndicator } from "./TypingIndicator";
 
 interface ChatMessage {
   id: string;
@@ -102,7 +102,6 @@ export function ChatInterface({
 
         if (reader) {
           let assistantMessage: ChatMessage | null = null;
-          let sources: VectorSearchResult[] = [];
 
           while (true) {
             const { done, value } = await reader.read();
@@ -140,11 +139,7 @@ export function ChatInterface({
                       };
                     }
                   }
-
-                  if (parsed.sources) {
-                    sources = parsed.sources;
-                  }
-                } catch (e) {
+                } catch {
                   // Ignore parsing errors for incomplete chunks
                 }
               }
@@ -290,6 +285,9 @@ export function ChatInterface({
               </div>
             </div>
           )}
+
+          {/* Typing indicator - only show when loading but not streaming */}
+          {isLoading && !isStreaming && <TypingIndicator />}
 
           <div ref={messagesEndRef} />
         </div>

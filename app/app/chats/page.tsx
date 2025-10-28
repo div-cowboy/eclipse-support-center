@@ -277,7 +277,7 @@ export default function ChatsPage() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary" className="text-xs">
-                        {chat._count.messages} messages
+                        {chat._count?.messages || 0} messages
                       </Badge>
                     </TableCell>
                     <TableCell

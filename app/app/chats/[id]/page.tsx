@@ -253,7 +253,7 @@ export default function ChatDetailPage() {
             <span suppressHydrationWarning>
               Last updated: {formatDate(chat.updatedAt)}
             </span>
-            <span>{chat._count.messages} messages</span>
+            <span>{chat._count?.messages || 0} messages</span>
           </div>
         </div>
       </div>
@@ -262,8 +262,8 @@ export default function ChatDetailPage() {
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4">
         {/* Left Column - Chat Interface */}
         <div className="min-h-[calc(100vh-200px)]">
-          <TraditionalChatInterface 
-            chatId={chat.id} 
+          <TraditionalChatInterface
+            chatId={chat.id}
             className="h-full"
             isSupportView={true}
           />
@@ -397,7 +397,7 @@ export default function ChatDetailPage() {
                 <p className="text-sm font-medium text-muted-foreground mb-1">
                   Total Messages
                 </p>
-                <p className="text-sm">{chat._count.messages}</p>
+                <p className="text-sm">{chat._count?.messages || 0}</p>
               </div>
             </CardContent>
           </Card>

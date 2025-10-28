@@ -20,6 +20,7 @@ import {
   User,
   PhoneCall,
 } from "lucide-react";
+import { TypingIndicator } from "./TypingIndicator";
 
 interface ChatMessage {
   id: string;
@@ -442,6 +443,9 @@ export function TraditionalChatInterface({
               </div>
             );
           })}
+
+          {/* Typing indicator */}
+          {isLoading && <TypingIndicator showAvatar={false} />}
 
           <div ref={messagesEndRef} />
         </div>
