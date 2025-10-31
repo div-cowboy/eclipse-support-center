@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
-import { globalEventEmitter } from "@/lib/event-emitter";
 import { Redis } from "@upstash/redis";
 
 /**
@@ -123,7 +122,7 @@ export async function POST(
 
     console.log(`✅ Chat ${chatId} assigned to user ${user.email}`);
 
-    // Broadcast agent_joined event to customer via real-time channel
+    // Prepare agent info for broadcast
     const agentJoinedPayload = {
       type: "agent_joined",
       data: {
@@ -134,17 +133,8 @@ export async function POST(
       timestamp: new Date().toISOString(),
     };
 
-    // Broadcast via Supabase (legacy)
-    globalEventEmitter.emit(`chat:${chatId}:agent_joined`, {
-      type: "broadcast",
-      event: "agent_joined",
-      payload: agentJoinedPayload.data,
-    });
-
-    // Also broadcast via WebSocket (if enabled)
-    const useWebSocket = process.env.NEXT_PUBLIC_USE_WEBSOCKET === "true";
+    // Broadcast via Redis pub/sub for WebSocket servers
     if (
-      useWebSocket &&
       process.env.UPSTASH_REDIS_REST_URL &&
       process.env.UPSTASH_REDIS_REST_TOKEN
     ) {
@@ -154,23 +144,29 @@ export async function POST(
           token: process.env.UPSTASH_REDIS_REST_TOKEN,
         });
 
-        // Publish to Redis stream for WebSocket servers
-        await redis.lpush(
-          `stream:chat:${chatId}`,
-          JSON.stringify(agentJoinedPayload)
-        );
-        await redis.ltrim(`stream:chat:${chatId}`, 0, 99); // Keep only last 100 messages
+        // Use Redis PUBLISH (pub/sub) not lpush (streams)
+        // The WebSocket server subscribes to 'chat:{chatId}' channel
+        await redis.publish(`chat:${chatId}`, JSON.stringify(agentJoinedPayload));
 
         console.log(
-          `📢 [WebSocket] Broadcasted agent_joined to Redis for chat:${chatId}`
+          `📢 [Redis Pub/Sub] Published agent_joined to chat:${chatId}`,
+          {
+            agentName: agentJoinedPayload.data.agentName,
+            channel: `chat:${chatId}`,
+          }
         );
       } catch (error) {
-        console.error("Failed to broadcast agent_joined via WebSocket:", error);
+        console.error(
+          "Failed to publish agent_joined to Redis pub/sub:",
+          error
+        );
         // Don't fail the request if Redis broadcast fails
       }
     }
 
-    console.log(`📢 Broadcasted agent_joined event for chat:${chatId}`);
+    console.log(
+      `✅ [Server] Chat assigned - agent_joined event published to Redis`
+    );
 
     return NextResponse.json({
       success: true,

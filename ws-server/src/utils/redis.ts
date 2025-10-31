@@ -1,7 +1,8 @@
-import { Redis } from "@upstash/redis";
+import Redis from "ioredis";
 import { logger } from "./logger";
 
 let redisClient: Redis | null = null;
+let redisSubscriber: Redis | null = null;
 
 /**
  * Initialize Redis client
@@ -11,23 +12,27 @@ export function initRedis(): Redis {
     return redisClient;
   }
 
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const redisUrl = process.env.REDIS_URL;
 
-  if (!url || !token) {
-    throw new Error(
-      "UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN must be set"
-    );
+  if (!redisUrl) {
+    throw new Error("REDIS_URL must be set");
   }
 
-  redisClient = new Redis({
-    url,
-    token,
+  redisClient = new Redis(redisUrl, {
+    maxRetriesPerRequest: 3,
+    enableReadyCheck: true,
+    lazyConnect: false,
   });
 
-  logger.info("Redis client initialized", {
-    url: url.substring(0, 30) + "...",
+  redisClient.on("error", (err) => {
+    logger.error("Redis client error", err);
   });
+
+  redisClient.on("connect", () => {
+    logger.info("Redis client connected");
+  });
+
+  logger.info("Redis client initialized");
 
   return redisClient;
 }
@@ -43,7 +48,7 @@ export function getRedis(): Redis {
 }
 
 /**
- * Publish message to Redis channel
+ * Publish message to Redis channel using native pub/sub
  */
 export async function publishToChannel(
   channel: string,
@@ -53,11 +58,8 @@ export async function publishToChannel(
     const redis = getRedis();
     const serialized = JSON.stringify(message);
 
-    // Use Redis Streams instead of pub/sub for Upstash REST API compatibility
-    await redis.lpush(`stream:${channel}`, serialized);
-
-    // Trim to keep only last 100 messages per channel
-    await redis.ltrim(`stream:${channel}`, 0, 99);
+    // Use native Redis PUBLISH command
+    await redis.publish(channel, serialized);
 
     logger.debug("Published to Redis channel", {
       channel,
@@ -70,67 +72,65 @@ export async function publishToChannel(
 }
 
 /**
- * Poll Redis channel for new messages
- * This is a workaround for Upstash REST API not supporting pub/sub
+ * Subscribe to Redis channel with native pub/sub
+ * Returns cleanup function to unsubscribe
  */
-export async function pollChannel(
+export function subscribeToChannel(
   channel: string,
-  callback: (message: any) => void,
-  intervalMs: number = 1000
-): Promise<() => void> {
-  let lastIndex = 0;
-  let isPolling = true;
-
-  const redis = getRedis();
-  const streamKey = `stream:${channel}`;
-
-  async function poll() {
-    if (!isPolling) return;
-
-    try {
-      // Get all messages from stream
-      const messages = await redis.lrange(streamKey, 0, -1);
-
-      if (messages.length > lastIndex) {
-        // Process new messages
-        const newMessages = messages.slice(lastIndex);
-        for (const msg of newMessages) {
-          try {
-            // Check if message is already an object or needs to be parsed
-            let parsed;
-            if (typeof msg === "string") {
-              parsed = JSON.parse(msg);
-            } else if (typeof msg === "object" && msg !== null) {
-              // Already an object, use as-is
-              parsed = msg;
-            } else {
-              logger.warn("Unexpected message format in Redis", {
-                type: typeof msg,
-                msg,
-              });
-              continue;
-            }
-            callback(parsed);
-          } catch (err) {
-            logger.error("Failed to parse Redis message", err);
-          }
-        }
-        lastIndex = messages.length;
-      }
-    } catch (error) {
-      logger.error("Error polling Redis channel", error);
+  callback: (message: any) => void
+): () => void {
+  // Create dedicated subscriber connection if not exists
+  if (!redisSubscriber) {
+    const redisUrl = process.env.REDIS_URL;
+    if (!redisUrl) {
+      throw new Error("REDIS_URL must be set");
     }
 
-    // Schedule next poll
-    setTimeout(poll, intervalMs);
+    redisSubscriber = new Redis(redisUrl, {
+      maxRetriesPerRequest: 3,
+      enableReadyCheck: true,
+      lazyConnect: false,
+    });
+
+    redisSubscriber.on("error", (err) => {
+      logger.error("Redis subscriber error", err);
+    });
+
+    redisSubscriber.on("connect", () => {
+      logger.info("Redis subscriber connected");
+    });
   }
 
-  // Start polling
-  poll();
+  // Subscribe to channel
+  redisSubscriber.subscribe(channel, (err) => {
+    if (err) {
+      logger.error("Failed to subscribe to channel", { channel, error: err });
+    } else {
+      logger.info("Subscribed to Redis channel", { channel });
+    }
+  });
+
+  // Handle incoming messages
+  const messageHandler = (ch: string, message: string) => {
+    if (ch === channel) {
+      try {
+        const parsed = JSON.parse(message);
+        callback(parsed);
+      } catch (err) {
+        logger.error("Failed to parse Redis message", err);
+      }
+    }
+  };
+
+  redisSubscriber.on("message", messageHandler);
 
   // Return cleanup function
   return () => {
-    isPolling = false;
+    if (redisSubscriber) {
+      redisSubscriber.unsubscribe(channel);
+      redisSubscriber.off("message", messageHandler);
+      logger.info("Unsubscribed from Redis channel", { channel });
+    }
   };
 }
 

@@ -1,4 +1,4 @@
-import { WebSocket } from 'ws';
+import { WebSocket } from "ws";
 
 /**
  * Authenticated WebSocket with user metadata
@@ -19,6 +19,7 @@ export interface AuthenticatedWebSocket extends WebSocket {
 export interface JWTPayload {
   userId: string;
   chatId: string;
+  isAuthenticated?: boolean;
   iat?: number;
   exp?: number;
 }
@@ -26,7 +27,7 @@ export interface JWTPayload {
 /**
  * WebSocket message types
  */
-export type WSMessageType = 'message' | 'typing' | 'agent_joined' | 'ping';
+export type WSMessageType = "message" | "typing" | "agent_joined" | "ping";
 
 /**
  * Incoming WebSocket message
@@ -34,7 +35,7 @@ export type WSMessageType = 'message' | 'typing' | 'agent_joined' | 'ping';
 export interface IncomingWSMessage {
   type: WSMessageType;
   content?: string;
-  role?: 'USER' | 'ASSISTANT' | 'AGENT';
+  role?: "USER" | "ASSISTANT" | "AGENT";
   isTyping?: boolean;
   agentId?: string;
   agentName?: string;
@@ -44,7 +45,7 @@ export interface IncomingWSMessage {
  * Outgoing WebSocket message
  */
 export interface OutgoingWSMessage {
-  type: 'connected' | 'message' | 'typing' | 'agent_joined' | 'error' | 'pong';
+  type: "connected" | "message" | "typing" | "agent_joined" | "error" | "pong";
   chatId?: string;
   timestamp?: string;
   data?: any;
@@ -72,7 +73,7 @@ export interface SavedMessage {
  * Redis pub/sub message
  */
 export interface RedisMessage {
-  type: WSMessageType | 'agent_joined';
+  type: WSMessageType | "agent_joined";
   chatId: string;
   data: any;
   timestamp: string;
@@ -82,7 +83,7 @@ export interface RedisMessage {
  * Server statistics
  */
 export interface ServerStats {
-  status: 'healthy' | 'degraded' | 'unhealthy';
+  status: "healthy" | "degraded" | "unhealthy";
   uptime: number;
   connections: {
     total: number;
@@ -95,4 +96,3 @@ export interface ServerStats {
   };
   timestamp: string;
 }
-

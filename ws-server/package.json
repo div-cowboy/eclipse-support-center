@@ -9,19 +9,23 @@
     "start": "dotenv -e .env -- node dist/server.js",
     "type-check": "tsc --noEmit"
   },
-  "keywords": ["websocket", "chat", "realtime"],
+  "keywords": [
+    "websocket",
+    "chat",
+    "realtime"
+  ],
   "author": "Eclipse Support Center",
   "license": "MIT",
   "dependencies": {
-    "@upstash/redis": "^1.28.4",
-    "ws": "^8.18.0",
+    "dotenv": "^16.4.5",
+    "ioredis": "^5.8.2",
     "jsonwebtoken": "^9.0.2",
-    "dotenv": "^16.4.5"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/ws": "^8.5.10",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/node": "^20.11.19",
+    "@types/ws": "^8.5.10",
     "tsx": "^4.7.1",
     "typescript": "^5.3.3"
   },
@@ -29,4 +33,3 @@
     "node": ">=20.0.0"
   }
 }
-

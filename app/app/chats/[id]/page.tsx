@@ -115,15 +115,16 @@ export default function ChatDetailPage() {
           chatId: data.chat.id,
           assignedToId: data.chat.assignedToId,
           assignedAt: data.chat.assignedAt,
+          assignedToName:
+            data.chat.assignedTo?.name || data.chat.assignedTo?.email,
         });
         setChat(data.chat);
 
-        // Agent joined broadcast is now handled server-side by the API
-        // The /api/chats/[id]/assign endpoint broadcasts to both:
-        // - Supabase Realtime (legacy)
-        // - Redis/WebSocket (new implementation)
+        // Agent joined broadcast is handled server-side by the API
+        // The /api/chats/[id]/assign endpoint publishes to Redis pub/sub
+        // which the WebSocket server subscribes to and broadcasts to all connected clients
         console.log(
-          "✅ [Client] Agent assignment complete - server broadcasting agent_joined event"
+          "✅ [Client] Agent assignment complete - server will broadcast agent_joined event"
         );
       } else {
         const error = await response.json();
