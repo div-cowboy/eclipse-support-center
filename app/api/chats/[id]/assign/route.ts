@@ -122,12 +122,33 @@ export async function POST(
 
     console.log(`✅ Chat ${chatId} assigned to user ${user.email}`);
 
+    // Create a system message in the database to persist the connection
+    const agentName = user.name || user.email || "Support Agent";
+    const systemMessage = await prisma.message.create({
+      data: {
+        content: `✅ You're now connected to ${agentName}`,
+        role: "SYSTEM",
+        chatId: chatId,
+        userId: null, // System messages don't have a user
+        metadata: {
+          type: "agent_joined",
+          agentId: user.id,
+          agentName: agentName,
+        },
+      },
+    });
+
+    console.log(`💾 Created system message for agent connection:`, {
+      messageId: systemMessage.id,
+      agentName,
+    });
+
     // Prepare agent info for broadcast
     const agentJoinedPayload = {
       type: "agent_joined",
       data: {
         agentId: user.id,
-        agentName: user.name || user.email || "Support Agent",
+        agentName: agentName,
         timestamp: new Date().toISOString(),
       },
       timestamp: new Date().toISOString(),
@@ -146,7 +167,10 @@ export async function POST(
 
         // Use Redis PUBLISH (pub/sub) not lpush (streams)
         // The WebSocket server subscribes to 'chat:{chatId}' channel
-        await redis.publish(`chat:${chatId}`, JSON.stringify(agentJoinedPayload));
+        await redis.publish(
+          `chat:${chatId}`,
+          JSON.stringify(agentJoinedPayload)
+        );
 
         console.log(
           `📢 [Redis Pub/Sub] Published agent_joined to chat:${chatId}`,

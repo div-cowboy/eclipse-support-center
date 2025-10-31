@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/app/auth";
 import { prisma } from "@/lib/prisma";
-import { globalEventEmitter } from "@/lib/event-emitter";
 import { Redis } from "@upstash/redis";
 
 /**
  * POST /api/chats/[id]/messages/send
  * Send a real-time message in an escalated chat
- * Saves to database and broadcasts via EventEmitter
+ * Saves to database and broadcasts via Redis pub/sub to WebSocket server
  */
 export async function POST(
   request: NextRequest,
@@ -93,11 +92,38 @@ export async function POST(
       }
     }
 
-    // Create message in database
-    // Use userId from body (for WebSocket server) or from session (for regular requests)
-    const messageUserId = isInternalRequest
-      ? userId
-      : session?.user?.id || null;
+    // Handle userId for anonymous users
+    // For anonymous users (userId starts with 'anon_'), create/get temporary user record
+    let messageUserId: string | null;
+
+    if (isInternalRequest && userId?.startsWith("anon_")) {
+      // Check if temporary user already exists
+      const tempEmail = `${userId}@anonymous.temp`;
+      let tempUser = await prisma.user.findUnique({
+        where: { email: tempEmail },
+        select: { id: true },
+      });
+
+      // Create temporary user if doesn't exist
+      if (!tempUser) {
+        tempUser = await prisma.user.create({
+          data: {
+            email: tempEmail,
+            name: "Anonymous User",
+            // No emailVerified - indicates temporary account
+          },
+          select: { id: true },
+        });
+        console.log(
+          `📝 Created temporary user: ${tempUser.id} for session ${userId}`
+        );
+      }
+
+      messageUserId = tempUser.id;
+    } else {
+      // Regular authenticated user or internal request with real userId
+      messageUserId = isInternalRequest ? userId : session?.user?.id || null;
+    }
 
     const message = await prisma.message.create({
       data: {
@@ -118,38 +144,23 @@ export async function POST(
       },
     });
 
-    // Prepare broadcast payload
-    const broadcastPayload = {
-      type: "broadcast",
-      event: "message",
-      payload: {
-        id: message.id,
-        content: message.content,
-        role: message.role.toLowerCase(),
-        timestamp: message.createdAt,
-        sender: message.user
-          ? {
-              id: message.user.id,
-              name: message.user.name || "Anonymous",
-              email: message.user.email,
-              avatar: message.user.image,
-            }
-          : {
-              id: "anonymous",
-              name: "Customer",
-              email: null,
-              avatar: null,
-            },
-      },
-    };
+    // Prepare sender info
+    const sender = message.user
+      ? {
+          id: message.user.id,
+          name: message.user.name || "Anonymous",
+          email: message.user.email,
+          avatar: message.user.image,
+        }
+      : {
+          id: "anonymous",
+          name: "Customer",
+          email: null,
+          avatar: null,
+        };
 
-    // Broadcast to all subscribers on this chat channel (Supabase/legacy)
-    globalEventEmitter.emit(`chat:${chatId}:message`, broadcastPayload);
-
-    // Also broadcast via WebSocket (if enabled)
-    const useWebSocket = process.env.NEXT_PUBLIC_USE_WEBSOCKET === "true";
+    // Broadcast via Redis pub/sub to WebSocket server
     if (
-      useWebSocket &&
       process.env.UPSTASH_REDIS_REST_URL &&
       process.env.UPSTASH_REDIS_REST_TOKEN
     ) {
@@ -159,22 +170,29 @@ export async function POST(
           token: process.env.UPSTASH_REDIS_REST_TOKEN,
         });
 
-        // Prepare payload for WebSocket (different format than Supabase)
+        // Prepare payload for WebSocket (matches WebSocket server format)
         const wsPayload = {
           type: "message",
-          data: broadcastPayload.payload,
+          data: {
+            id: message.id,
+            content: message.content,
+            role: message.role.toLowerCase(),
+            timestamp: message.createdAt,
+            sender: sender,
+          },
           timestamp: new Date().toISOString(),
         };
 
-        // Publish to Redis stream for WebSocket servers
-        await redis.lpush(`stream:chat:${chatId}`, JSON.stringify(wsPayload));
-        await redis.ltrim(`stream:chat:${chatId}`, 0, 99); // Keep only last 100 messages
+        // Use Redis PUBLISH (pub/sub) - the WebSocket server subscribes to this channel
+        await redis.publish(`chat:${chatId}`, JSON.stringify(wsPayload));
 
-        console.log(
-          `📢 [WebSocket] Broadcasted message to Redis for chat:${chatId}`
-        );
+        console.log(`📢 [Redis Pub/Sub] Published message to chat:${chatId}`, {
+          messageId: message.id,
+          role: message.role,
+          channel: `chat:${chatId}`,
+        });
       } catch (error) {
-        console.error("Failed to broadcast message via WebSocket:", error);
+        console.error("Failed to publish message to Redis pub/sub:", error);
         // Don't fail the request if Redis broadcast fails
       }
     }
@@ -182,7 +200,7 @@ export async function POST(
     console.log(`[Real-time] Message sent to chat:${chatId}`, {
       messageId: message.id,
       role: message.role,
-      sender: broadcastPayload.payload.sender.name,
+      sender: sender.name,
     });
 
     // Return success response
@@ -193,7 +211,7 @@ export async function POST(
         content: message.content,
         role: message.role,
         createdAt: message.createdAt,
-        sender: broadcastPayload.payload.sender,
+        sender: sender,
       },
     });
   } catch (error) {

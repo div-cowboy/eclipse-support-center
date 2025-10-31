@@ -56,6 +56,11 @@ interface ChatMessage {
     status?: "pending" | "resolved" | "escalated";
     priority?: "low" | "medium" | "high" | "urgent";
     assignedTo?: string;
+
+    // System message metadata
+    type?: "agent_joined" | "agent_left" | "escalation_started" | string;
+    agentId?: string;
+    agentName?: string;
   };
 }
 
@@ -212,14 +217,19 @@ export function UniversalChatInterface({
       setAwaitingSupport(false);
 
       // Check if we already have an agent joined message (prevent duplicates)
+      // This can happen if the message was already loaded from the database
       setMessages((prev) => {
-        const hasAgentJoined = prev.some((msg) =>
-          msg.id.startsWith("system_agent_joined_")
+        const hasAgentJoined = prev.some(
+          (msg) =>
+            msg.role === "system" &&
+            (msg.id.startsWith("system_agent_joined_") ||
+              msg.content.includes("You're now connected to") ||
+              msg.metadata?.type === "agent_joined")
         );
 
         if (hasAgentJoined) {
           console.log(
-            "⚠️ Agent joined message already exists, skipping duplicate"
+            "⚠️ Agent joined message already exists (from DB or real-time), skipping duplicate"
           );
           return prev;
         }
@@ -229,9 +239,14 @@ export function UniversalChatInterface({
           role: "system",
           content: `✅ You're now connected to ${agent.agentName}`,
           timestamp: new Date(agent.timestamp),
+          metadata: {
+            type: "agent_joined",
+            agentId: agent.agentId,
+            agentName: agent.agentName,
+          },
         };
 
-        console.log("✅ Agent joined message added to chat");
+        console.log("✅ Agent joined message added to chat (real-time)");
         return [...prev, systemMessage];
       });
     },
