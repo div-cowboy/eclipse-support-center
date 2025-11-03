@@ -22,6 +22,7 @@ export interface WebSocketChatMessage {
 export type WSMessageType =
   | "connected"
   | "message"
+  | "message_updated"
   | "typing"
   | "agent_joined"
   | "error"
@@ -31,6 +32,19 @@ interface UseWebSocketChatOptions {
   chatId: string;
   enabled: boolean;
   onMessage?: (message: WebSocketChatMessage) => void;
+  onMessageUpdated?: (message: {
+    id: string;
+    content: string;
+    role: "user" | "assistant" | "agent" | "system";
+    timestamp: Date;
+    updatedAt: Date;
+    sender: {
+      id: string;
+      name: string;
+      email?: string | null;
+      avatar?: string | null;
+    };
+  }) => void;
   onAgentJoined?: (agent: {
     agentId: string;
     agentName: string;
@@ -61,6 +75,7 @@ export function useWebSocketChat({
   chatId,
   enabled,
   onMessage,
+  onMessageUpdated,
   onAgentJoined,
   onTyping,
   onError,
@@ -76,6 +91,7 @@ export function useWebSocketChat({
 
   // Use refs for callbacks to avoid re-subscribing on every render
   const onMessageRef = useRef(onMessage);
+  const onMessageUpdatedRef = useRef(onMessageUpdated);
   const onAgentJoinedRef = useRef(onAgentJoined);
   const onTypingRef = useRef(onTyping);
   const onErrorRef = useRef(onError);
@@ -85,6 +101,7 @@ export function useWebSocketChat({
   // Update refs when callbacks change
   useEffect(() => {
     onMessageRef.current = onMessage;
+    onMessageUpdatedRef.current = onMessageUpdated;
     onAgentJoinedRef.current = onAgentJoined;
     onTypingRef.current = onTyping;
     onErrorRef.current = onError;
@@ -92,6 +109,7 @@ export function useWebSocketChat({
     onDisconnectedRef.current = onDisconnected;
   }, [
     onMessage,
+    onMessageUpdated,
     onAgentJoined,
     onTyping,
     onError,
@@ -166,6 +184,19 @@ export function useWebSocketChat({
                     content: message.data.content,
                     role: message.data.role,
                     timestamp: new Date(message.data.timestamp),
+                    sender: message.data.sender,
+                  });
+                }
+                break;
+
+              case "message_updated":
+                if (onMessageUpdatedRef.current && message.data) {
+                  onMessageUpdatedRef.current({
+                    id: message.data.id,
+                    content: message.data.content,
+                    role: message.data.role,
+                    timestamp: new Date(message.data.timestamp),
+                    updatedAt: new Date(message.data.updatedAt),
                     sender: message.data.sender,
                   });
                 }

@@ -17,6 +17,8 @@ import {
   Bug,
   ArrowLeft,
   X,
+  Edit,
+  Save,
 } from "lucide-react";
 import { BarLoader } from "react-spinners";
 import { TypingIndicator } from "./TypingIndicator";
@@ -175,6 +177,9 @@ export function UniversalChatInterface({
   const [hasAutoSentFirstMessage, setHasAutoSentFirstMessage] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editingContent, setEditingContent] = useState<string>("");
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -225,6 +230,44 @@ export function UniversalChatInterface({
 
         return [...withoutOptimistic, chatMessage];
       });
+    },
+    // @ts-expect-error - onMessageUpdated is supported but TypeScript cache may not reflect it yet
+    onMessageUpdated: (message: {
+      id: string;
+      content: string;
+      role: "user" | "assistant" | "agent" | "system";
+      timestamp: Date;
+      updatedAt: Date;
+      sender: {
+        id: string;
+        name: string;
+        email?: string | null;
+        avatar?: string | null;
+      };
+    }) => {
+      // Handle real-time message updates
+      console.log("[UniversalChatInterface] Received message update:", {
+        id: message.id,
+        content: message.content,
+        role: message.role,
+      });
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === message.id
+            ? {
+                ...msg,
+                content: message.content,
+              }
+            : msg
+        )
+      );
+
+      // Exit edit mode if we were editing this message
+      if (editingMessageId === message.id) {
+        setEditingMessageId(null);
+        setEditingContent("");
+      }
     },
     onAgentJoined: (agent) => {
       // Show system message when agent joins
@@ -1018,6 +1061,69 @@ export function UniversalChatInterface({
     }
   };
 
+  const handleStartEdit = (message: ChatMessage) => {
+    setEditingMessageId(message.id);
+    setEditingContent(message.content);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingMessageId(null);
+    setEditingContent("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingMessageId || !config.chatId || !editingContent.trim()) {
+      return;
+    }
+
+    setIsSavingEdit(true);
+    try {
+      const response = await fetch(
+        `/api/chats/${config.chatId}/messages/${editingMessageId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            content: editingContent.trim(),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to update message");
+      }
+
+      const data = await response.json();
+
+      // Update the message in the messages array
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === editingMessageId
+            ? {
+                ...msg,
+                content: data.message.content,
+              }
+            : msg
+        )
+      );
+
+      setEditingMessageId(null);
+      setEditingContent("");
+    } catch (error) {
+      console.error("Error updating message:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Failed to update message. Please try again."
+      );
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   const getSourceIcon = (type?: string) => {
     if (type === "organization_description") return Building2;
     return type === "organization" ? Building2 : MessageSquare;
@@ -1189,6 +1295,17 @@ export function UniversalChatInterface({
                     new Date(message.timestamp) >= new Date(chatInfo.assignedAt)
                   : message.role === "user"; // In customer view, user messages are "own"
 
+              // Determine if this message can be edited (support rep messages in support view)
+              // Only assistant messages sent after chat assignment can be edited
+              const isEditable =
+                config.features.supportView &&
+                config.type === "traditional" &&
+                message.role === "assistant" &&
+                chatInfo?.assignedAt &&
+                new Date(message.timestamp) >= new Date(chatInfo.assignedAt);
+
+              const isEditing = editingMessageId === message.id;
+
               return (
                 <div key={message.id}>
                   {/* Handoff banner */}
@@ -1271,7 +1388,7 @@ export function UniversalChatInterface({
                       )}
 
                       <div
-                        className={`rounded-lg px-3 py-2 ${
+                        className={`rounded-lg px-3 py-2 relative group ${
                           isOwnMessage
                             ? "bg-primary text-primary-foreground"
                             : message.role === "system"
@@ -1281,9 +1398,72 @@ export function UniversalChatInterface({
                             : "bg-muted"
                         }`}
                       >
-                        <p className="text-sm whitespace-pre-wrap">
-                          {message.content}
-                        </p>
+                        {/* Edit icon for support rep messages */}
+                        {isEditable && !isEditing && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className={`absolute top-[6px] right-[-15px] h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity ${
+                              isOwnMessage
+                                ? "hover:bg-primary-foreground/20 text-primary-foreground"
+                                : "hover:bg-background/20"
+                            }`}
+                            onClick={() => handleStartEdit(message)}
+                            title="Edit message"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                        )}
+
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <textarea
+                              value={editingContent}
+                              onChange={(e) =>
+                                setEditingContent(e.target.value)
+                              }
+                              className="w-full text-sm bg-background text-foreground border border-border rounded-md px-2 py-1 min-h-[60px] resize-none"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Escape") {
+                                  handleCancelEdit();
+                                } else if (
+                                  e.key === "Enter" &&
+                                  (e.metaKey || e.ctrlKey)
+                                ) {
+                                  e.preventDefault();
+                                  handleSaveEdit();
+                                }
+                              }}
+                            />
+                            <div className="flex items-center gap-2 justify-end">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={handleCancelEdit}
+                                disabled={isSavingEdit}
+                                className="h-7 text-xs"
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                size="sm"
+                                onClick={handleSaveEdit}
+                                disabled={
+                                  isSavingEdit || !editingContent.trim()
+                                }
+                                className="h-7 text-xs"
+                              >
+                                <Save className="h-3 w-3 mr-1" />
+                                {isSavingEdit ? "Saving..." : "Save"}
+                              </Button>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-sm whitespace-pre-wrap">
+                            {message.content}
+                          </p>
+                        )}
 
                         {/* Debug mode - show raw response */}
                         {config.features.debugMode &&

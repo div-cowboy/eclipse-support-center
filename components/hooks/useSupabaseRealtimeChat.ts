@@ -33,6 +33,19 @@ interface UseRealtimeChatOptions {
   chatId: string;
   enabled: boolean;
   onMessage?: (message: RealtimeChatMessage) => void;
+  onMessageUpdated?: (message: {
+    id: string;
+    content: string;
+    role: "user" | "assistant" | "agent" | "system";
+    timestamp: Date;
+    updatedAt: Date;
+    sender: {
+      id: string;
+      name: string;
+      email?: string | null;
+      avatar?: string | null;
+    };
+  }) => void;
   onAgentJoined?: (agent: {
     agentId: string;
     agentName: string;
