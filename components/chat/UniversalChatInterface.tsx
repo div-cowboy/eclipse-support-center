@@ -79,6 +79,7 @@ export interface ChatConfig {
   description?: string;
   placeholder?: string;
   welcomeMessage?: string;
+  autoSendFirstMessage?: string; // Display this message as an assistant message when chat opens (for new chats only, NO API call, appears on support rep side)
   className?: string;
   height?: string;
 
@@ -124,6 +125,21 @@ interface UniversalChatInterfaceProps {
 export function UniversalChatInterface({
   config,
 }: UniversalChatInterfaceProps) {
+  // Log initial config on mount
+  useEffect(() => {
+    console.log("[UniversalChatInterface] 🎬 INITIAL CONFIG:", {
+      type: config.type,
+      chatbotId: config.chatbotId,
+      chatId: config.chatId,
+      autoSendFirstMessage: config.autoSendFirstMessage,
+      welcomeMessage: config.welcomeMessage,
+      featuresEscalation: config.features.escalation,
+      featuresRealtimeMode: config.features.realtimeMode,
+      featuresStreaming: config.features.streaming,
+      apiEndpoint: config.apiEndpoint,
+    });
+  }, []); // Only run once on mount
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -156,6 +172,7 @@ export function UniversalChatInterface({
     _count?: { messages?: number; contextBlocks?: number };
   } | null>(null);
   const [hasShownWelcome, setHasShownWelcome] = useState(false);
+  const [hasAutoSentFirstMessage, setHasAutoSentFirstMessage] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
 
@@ -369,6 +386,16 @@ export function UniversalChatInterface({
 
   // Show welcome message (only for NEW chats, not when loading existing chat)
   useEffect(() => {
+    console.log("[UniversalChatInterface] 👋 WELCOME MESSAGE CHECK:", {
+      hasWelcomeMessage: !!config.welcomeMessage,
+      welcomeMessage: config.welcomeMessage,
+      hasShownWelcome,
+      messagesLength: messages.length,
+      hasChatId: !!config.chatId,
+      isLoadingHistory,
+      chatId: config.chatId,
+      type: config.type,
+    });
     if (
       config.welcomeMessage &&
       !hasShownWelcome &&
@@ -376,6 +403,10 @@ export function UniversalChatInterface({
       !config.chatId && // Only show for new chats
       !isLoadingHistory // Not while loading existing chat
     ) {
+      console.log(
+        "[UniversalChatInterface] ✅ Showing welcome message:",
+        config.welcomeMessage
+      );
       const welcomeMessage: ChatMessage = {
         id: `welcome_${Date.now()}`,
         role: "assistant",
@@ -391,6 +422,147 @@ export function UniversalChatInterface({
     messages.length,
     config.chatId,
     isLoadingHistory,
+  ]);
+
+  // Auto-send first message (only for NEW chats, not when loading existing chat)
+  // This saves the message as ASSISTANT role to database WITHOUT triggering AI response
+  // Appears on support rep side (left side) of the chat
+  useEffect(() => {
+    console.log("[UniversalChatInterface] 🔄 AUTO-SEND CHECK:", {
+      hasAutoSendFirstMessage: !!config.autoSendFirstMessage,
+      autoSendFirstMessage: config.autoSendFirstMessage,
+      hasAutoSentFirstMessage,
+      hasChatId: !!config.chatId,
+      isLoadingHistory,
+      isLoading,
+      isStreaming,
+      messagesLength: messages.length,
+      chatId: config.chatId,
+      type: config.type,
+    });
+
+    if (
+      config.autoSendFirstMessage &&
+      !hasAutoSentFirstMessage &&
+      !config.chatId && // Only for new chats
+      !isLoadingHistory && // Not while loading existing chat
+      !isLoading && // Not while sending a message
+      messages.length <= 1 && // Only if no messages or just welcome message
+      !isStreaming && // Not while streaming
+      (config.type === "embed" || config.type === "chatbot") // Only for embed/chatbot types
+    ) {
+      console.log(
+        "[UniversalChatInterface] ✅ AUTO-SEND CONDITIONS MET, saving message to database..."
+      );
+      // Wait a bit for welcome message to render if it exists
+      const timer = setTimeout(async () => {
+        const messageToSave = config.autoSendFirstMessage;
+        if (messageToSave && config.chatbotId) {
+          console.log(
+            "[UniversalChatInterface] 💾 SAVING FIRST MESSAGE AS ASSISTANT (NO AI):",
+            {
+              message: messageToSave,
+              chatbotId: config.chatbotId,
+              chatId: config.chatId,
+              type: config.type,
+              role: "assistant", // Will appear on support rep side
+            }
+          );
+
+          try {
+            // Save message to database without triggering AI
+            const response = await fetch(
+              `/api/embed/chatbots/${config.chatbotId}/save-message`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  message: messageToSave,
+                  chatId: config.chatId || null,
+                }),
+              }
+            );
+
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            if (data.success && data.message) {
+              // Create message object from saved message
+              const savedMessage: ChatMessage = {
+                id: data.message.id,
+                role: data.message.role as "user" | "assistant" | "agent",
+                content: data.message.content,
+                timestamp: new Date(data.message.timestamp),
+                userId: data.message.userId,
+              };
+
+              // Add to messages array
+              setMessages((prev) => [...prev, savedMessage]);
+              setHasAutoSentFirstMessage(true);
+
+              // If chatId was created, notify parent
+              if (data.chatId && config.onChatCreated) {
+                config.onChatCreated(data.chatId);
+                console.log(
+                  "[UniversalChatInterface] 📝 Chat ID created from auto-send:",
+                  data.chatId
+                );
+              }
+
+              console.log(
+                "[UniversalChatInterface] ✅ First message saved to database successfully (no AI call)"
+              );
+            }
+          } catch (error) {
+            console.error(
+              "[UniversalChatInterface] ❌ Error saving auto-send message:",
+              error
+            );
+            // Still add to UI even if save fails (graceful degradation)
+            // Use assistant role so it appears on support rep side
+            const assistantMessage: ChatMessage = {
+              id: `auto_send_${Date.now()}`,
+              role: "assistant",
+              content: messageToSave,
+              timestamp: new Date(),
+            };
+            setMessages((prev) => [...prev, assistantMessage]);
+            setHasAutoSentFirstMessage(true);
+          }
+        }
+      }, 500); // Small delay to ensure welcome message renders first
+
+      return () => {
+        console.log(
+          "[UniversalChatInterface] 🧹 AUTO-SEND CLEANUP: clearing timer"
+        );
+        clearTimeout(timer);
+      };
+    } else if (config.autoSendFirstMessage && hasAutoSentFirstMessage) {
+      console.log(
+        "[UniversalChatInterface] ⏭️ AUTO-SEND SKIPPED: already saved"
+      );
+    } else if (config.autoSendFirstMessage) {
+      console.log(
+        "[UniversalChatInterface] ⏭️ AUTO-SEND SKIPPED: conditions not met"
+      );
+    }
+  }, [
+    config.autoSendFirstMessage,
+    config.chatbotId,
+    config.chatId,
+    config.type,
+    config.onChatCreated,
+    hasAutoSentFirstMessage,
+    isLoadingHistory,
+    isLoading,
+    isStreaming,
+    messages.length,
   ]);
 
   const scrollToBottom = () => {
@@ -642,9 +814,30 @@ export function UniversalChatInterface({
                 parsed.escalationRequested &&
                 config.features.escalation
               ) {
+                console.log(
+                  "[UniversalChatInterface] 🚨 ESCALATION DETECTED (streaming):",
+                  {
+                    escalationRequested: parsed.escalationRequested,
+                    escalationReason: parsed.escalationReason,
+                    configFeaturesEscalation: config.features.escalation,
+                    escalationActivated,
+                    currentEscalationRequested: escalationRequested,
+                    chatId: config.chatId,
+                    type: config.type,
+                  }
+                );
                 setEscalationRequested(true);
                 setEscalationReason(
                   parsed.escalationReason || "User requested human assistance"
+                );
+                console.log(
+                  "[UniversalChatInterface] ✅ Escalation state updated (streaming):",
+                  {
+                    escalationRequested: true,
+                    escalationReason:
+                      parsed.escalationReason ||
+                      "User requested human assistance",
+                  }
                 );
               }
             } catch {
@@ -691,9 +884,39 @@ export function UniversalChatInterface({
 
       // Check for escalation
       if (data.escalationRequested && config.features.escalation) {
+        console.log(
+          "[UniversalChatInterface] 🚨 ESCALATION DETECTED (regular):",
+          {
+            escalationRequested: data.escalationRequested,
+            escalationReason: data.escalationReason,
+            configFeaturesEscalation: config.features.escalation,
+            escalationActivated,
+            currentEscalationRequested: escalationRequested,
+            chatId: config.chatId,
+            type: config.type,
+          }
+        );
         setEscalationRequested(true);
         setEscalationReason(
           data.escalationReason || "User requested human assistance"
+        );
+        console.log(
+          "[UniversalChatInterface] ✅ Escalation state updated (regular):",
+          {
+            escalationRequested: true,
+            escalationReason:
+              data.escalationReason || "User requested human assistance",
+          }
+        );
+      } else if (data.escalationRequested && !config.features.escalation) {
+        console.log(
+          "[UniversalChatInterface] ⚠️ Escalation detected but features.escalation is false:",
+          {
+            escalationRequested: data.escalationRequested,
+            configFeaturesEscalation: config.features.escalation,
+            chatId: config.chatId,
+            type: config.type,
+          }
         );
       }
 
@@ -1216,7 +1439,27 @@ export function UniversalChatInterface({
           </div>
 
           {/* Escalation Button */}
-          {config.features.escalation && escalationRequested && (
+          {(() => {
+            const shouldShowEscalation =
+              config.features.escalation &&
+              escalationRequested &&
+              !escalationActivated;
+            if (config.features.escalation || escalationRequested) {
+              console.log(
+                "[UniversalChatInterface] 🎨 ESCALATION UI RENDER CHECK:",
+                {
+                  shouldShow: shouldShowEscalation,
+                  configFeaturesEscalation: config.features.escalation,
+                  escalationRequested,
+                  escalationActivated,
+                  escalationReason,
+                  chatId: config.chatId,
+                  type: config.type,
+                }
+              );
+            }
+            return shouldShowEscalation;
+          })() && (
             <div className="border-t border-b bg-blue-50 dark:bg-blue-950 p-4 flex-shrink-0">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">

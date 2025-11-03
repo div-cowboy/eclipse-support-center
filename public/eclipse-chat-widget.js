@@ -15,6 +15,7 @@
  * @property {boolean} [showBranding]
  * @property {string} [welcomeMessage]
  * @property {string} [placeholder]
+ * @property {string} [autoSendFirstMessage] - Auto-send this message when chat opens (for new chats only)
  * @property {"bottom-right"|"bottom-left"|"top-right"|"top-left"|"center"} [position]
  * @property {boolean} [autoOpen]
  * @property {string} [buttonText]
@@ -27,6 +28,13 @@
 
 class EclipseChatWidget {
   constructor(config = {}, baseUrl = "") {
+    console.log("[EclipseChatWidget] 🏗️ Constructor called with config:", {
+      config,
+      baseUrl,
+      hasAutoSendFirstMessage: !!config.autoSendFirstMessage,
+      autoSendFirstMessage: config.autoSendFirstMessage,
+    });
+
     this.config = {
       theme: "auto",
       borderRadius: "8px",
@@ -41,6 +49,14 @@ class EclipseChatWidget {
       offset: {},
       ...config,
     };
+
+    console.log("[EclipseChatWidget] ✅ Final merged config:", {
+      autoSendFirstMessage: this.config.autoSendFirstMessage,
+      welcomeMessage: this.config.welcomeMessage,
+      chatbotId: this.config.chatbotId,
+      mode: this.config.mode,
+    });
+
     this.baseUrl = baseUrl;
     this.iframe = null;
     this.button = null;
@@ -211,6 +227,15 @@ class EclipseChatWidget {
 
     this.iframe = document.createElement("iframe");
 
+    console.log("[EclipseChatWidget] 🔧 Creating iframe with config:", {
+      chatbotId: this.config.chatbotId,
+      autoSendFirstMessage: this.config.autoSendFirstMessage,
+      welcomeMessage: this.config.welcomeMessage,
+      placeholder: this.config.placeholder,
+      mode: this.config.mode,
+      allConfig: this.config,
+    });
+
     const params = new URLSearchParams();
     if (this.config.organizationId)
       params.set("organizationId", this.config.organizationId);
@@ -228,8 +253,25 @@ class EclipseChatWidget {
       params.set("welcomeMessage", this.config.welcomeMessage);
     if (this.config.placeholder)
       params.set("placeholder", this.config.placeholder);
+    if (this.config.autoSendFirstMessage) {
+      params.set("autoSendFirstMessage", this.config.autoSendFirstMessage);
+      console.log(
+        "[EclipseChatWidget] ✅ Added autoSendFirstMessage to URL params:",
+        this.config.autoSendFirstMessage
+      );
+    } else {
+      console.log(
+        "[EclipseChatWidget] ⚠️ autoSendFirstMessage is missing from config:",
+        {
+          hasAutoSendFirstMessage: !!this.config.autoSendFirstMessage,
+          autoSendFirstMessage: this.config.autoSendFirstMessage,
+        }
+      );
+    }
 
-    this.iframe.src = `${this.baseUrl}/embed/chat?${params.toString()}`;
+    const iframeUrl = `http://localhost:3000/embed/chat?${params.toString()}`;
+    console.log("[EclipseChatWidget] 🔗 Generated iframe URL:", iframeUrl);
+    this.iframe.src = iframeUrl;
     this.iframe.style.cssText = `
       width: 100%;
       height: 100%;
@@ -368,6 +410,8 @@ if (typeof document !== "undefined") {
           script.getAttribute("data-welcome-message") || undefined,
         placeholder:
           script.getAttribute("data-placeholder") || "Type your message...",
+        autoSendFirstMessage:
+          script.getAttribute("data-auto-send-first-message") || undefined,
         position: script.getAttribute("data-position") || "bottom-right",
         autoOpen: script.getAttribute("data-auto-open") === "true",
         buttonText: script.getAttribute("data-button-text") || "Chat with us",
@@ -375,6 +419,23 @@ if (typeof document !== "undefined") {
         iconSize: script.getAttribute("data-icon-size") || "60px",
         offset: offset,
       };
+
+      console.log(
+        "[EclipseChatWidget] 📋 Parsed config from data attributes:",
+        {
+          autoSendFirstMessage: config.autoSendFirstMessage,
+          dataAutoSendFirstMessage: script.getAttribute(
+            "data-auto-send-first-message"
+          ),
+          welcomeMessage: config.welcomeMessage,
+          chatbotId: config.chatbotId,
+          mode: config.mode,
+          allAttributes: Array.from(script.attributes).map((attr) => ({
+            name: attr.name,
+            value: attr.value,
+          })),
+        }
+      );
 
       const baseUrl = script.getAttribute("data-base-url") || "";
       new EclipseChatWidget(config, baseUrl);

@@ -24,6 +24,7 @@ interface EmbedConfig {
   showBranding?: boolean;
   welcomeMessage?: string;
   placeholder?: string;
+  autoSendFirstMessage?: string; // Display this message as an assistant message when chat opens (NO API call, appears on support rep side)
   customCSS?: string;
   fontFamily?: string;
   fontSize?: string;
@@ -54,10 +55,28 @@ function EmbedChatContent() {
     showBranding: searchParams.get("showBranding") !== "false",
     welcomeMessage: searchParams.get("welcomeMessage") || undefined,
     placeholder: searchParams.get("placeholder") || "Type your message...",
+    autoSendFirstMessage: searchParams.get("autoSendFirstMessage") || undefined,
     customCSS: searchParams.get("customCSS") || undefined,
     fontFamily: searchParams.get("fontFamily") || undefined,
     fontSize: searchParams.get("fontSize") || undefined,
   };
+
+  // Log parsed config
+  useEffect(() => {
+    console.log("[EmbedChat] 📥 Parsed config from URL:", {
+      chatbotId: config.chatbotId,
+      autoSendFirstMessage: config.autoSendFirstMessage,
+      welcomeMessage: config.welcomeMessage,
+      placeholder: config.placeholder,
+      showBranding: config.showBranding,
+      allParams: Object.fromEntries(searchParams.entries()),
+    });
+  }, [
+    config.chatbotId,
+    config.autoSendFirstMessage,
+    config.welcomeMessage,
+    searchParams,
+  ]);
 
   // Check if localStorage is available
   useEffect(() => {
@@ -164,9 +183,15 @@ function EmbedChatContent() {
 
   const handleEscalationRequested = useCallback(
     async (reason: string) => {
+      console.log("[EmbedChat] 🚨 ESCALATION REQUESTED CALLBACK:", {
+        reason,
+        chatbotId: config.chatbotId,
+        chatId,
+        currentIsEscalated: isEscalated,
+      });
       // Log escalation to backend
       try {
-        await fetch("/api/escalations", {
+        const response = await fetch("/api/escalations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -179,16 +204,26 @@ function EmbedChatContent() {
           }),
         });
 
+        console.log("[EmbedChat] 📡 Escalation API response:", {
+          ok: response.ok,
+          status: response.status,
+        });
+
         // Mark as escalated to enable real-time mode
         setIsEscalated(true);
         console.log(
-          "[EmbedChat] Escalation completed, enabling real-time mode"
+          "[EmbedChat] ✅ Escalation completed, enabling real-time mode:",
+          {
+            isEscalated: true,
+            chatId,
+            realtimeMode: true,
+          }
         );
       } catch (error) {
-        console.error("Error logging escalation:", error);
+        console.error("[EmbedChat] ❌ Error logging escalation:", error);
       }
     },
-    [config.chatbotId, chatId]
+    [config.chatbotId, chatId, isEscalated]
   );
 
   const handleMessageSent = useCallback(
@@ -260,20 +295,34 @@ function EmbedChatContent() {
 
   // Log current state for debugging
   useEffect(() => {
-    console.log("[EmbedChat] State changed:", {
+    console.log("[EmbedChat] 🔄 State changed:", {
       chatId,
       isEscalated,
       realtimeModeEnabled: isEscalated && !!chatId,
       view,
+      configEscalation: !isEscalated,
+      autoSendFirstMessage: config.autoSendFirstMessage,
+      welcomeMessage: config.welcomeMessage,
     });
-  }, [chatId, isEscalated, view]);
+  }, [
+    chatId,
+    isEscalated,
+    view,
+    config.autoSendFirstMessage,
+    config.welcomeMessage,
+  ]);
 
   // Create universal chat config (memoized to prevent unnecessary re-renders)
   const chatConfig: ChatConfig = useMemo(() => {
-    console.log("[EmbedChat] Creating chat config:", {
+    console.log("[EmbedChat] 📋 Creating chat config:", {
       chatId,
       isEscalated,
       realtimeMode: isEscalated && !!chatId,
+      escalationFeature: !isEscalated,
+      autoSendFirstMessage: config.autoSendFirstMessage,
+      welcomeMessage: config.welcomeMessage,
+      chatbotId: config.chatbotId,
+      view,
     });
 
     return {
@@ -287,6 +336,7 @@ function EmbedChatContent() {
         ? "Message support agent..."
         : config.placeholder,
       welcomeMessage: config.welcomeMessage,
+      autoSendFirstMessage: config.autoSendFirstMessage,
       height: config.height,
       className: "h-full border-0 shadow-none",
       features: {
@@ -323,6 +373,7 @@ function EmbedChatContent() {
     config.fontSize,
     config.customCSS,
     config.welcomeMessage,
+    config.autoSendFirstMessage,
     config.height,
     config.showBranding,
     chatbotInfo?.name,

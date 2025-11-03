@@ -74,11 +74,17 @@ export default function ChatbotDetailPage() {
     showBranding: true,
     welcomeMessage: "",
     placeholder: "Type your message...",
+    autoSendFirstMessage: "", // Display this message as an assistant message when chat opens (NO API call, appears on support rep side)
     fontFamily: "",
     fontSize: "",
     // Widget-specific options
     iconSize: "60",
-    position: "bottom-right" as "bottom-right" | "bottom-left" | "top-right" | "top-left" | "center",
+    position: "bottom-right" as
+      | "bottom-right"
+      | "bottom-left"
+      | "top-right"
+      | "top-left"
+      | "center",
     buttonText: "Chat with us",
     autoOpen: false,
   });
@@ -218,25 +224,48 @@ export default function ChatbotDetailPage() {
 
   const getBaseUrl = () => {
     // Use environment variable if set, otherwise fall back to window.location.origin
-    if (typeof window !== "undefined") {
-      const envBaseUrl = process.env.NEXT_PUBLIC_EMBED_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
-      if (envBaseUrl) {
-        // Ensure it doesn't have a trailing slash
-        return envBaseUrl.replace(/\/$/, "");
+    // In Next.js, NEXT_PUBLIC_* vars are embedded at build time and available in client components
+
+    // Check for environment variables first (these are available at build time)
+    const envEmbedBaseUrl = process.env.NEXT_PUBLIC_EMBED_BASE_URL;
+    const envBaseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+
+    // Use embed-specific base URL first, then fall back to general base URL
+    const envUrl = envEmbedBaseUrl || envBaseUrl;
+
+    if (envUrl && typeof envUrl === "string" && envUrl.trim() !== "") {
+      // Ensure it doesn't have a trailing slash
+      const cleanedUrl = envUrl.trim().replace(/\/$/, "");
+      // Ensure it's a valid URL (starts with http:// or https://)
+      if (
+        cleanedUrl.startsWith("http://") ||
+        cleanedUrl.startsWith("https://")
+      ) {
+        return cleanedUrl;
       }
+    }
+
+    // Fall back to window.location.origin if available (browser context)
+    if (
+      typeof window !== "undefined" &&
+      window.location &&
+      window.location.origin
+    ) {
       return window.location.origin;
     }
+
+    // Last resort: return empty string (shouldn't happen in browser)
     return "";
   };
 
   const getEmbedUrl = () => {
     if (!chatbot) return "";
-    
+
     const baseUrl = getBaseUrl();
     const params = new URLSearchParams({
       chatbotId: chatbot.id,
     });
-    
+
     if (chatbot.organizationId) {
       params.append("organizationId", chatbot.organizationId);
     }
@@ -247,7 +276,7 @@ export default function ChatbotDetailPage() {
     }
     if (embedConfig.primaryColor) {
       // URL encode the # symbol - URLSearchParams doesn't encode # automatically
-      const encodedColor = embedConfig.primaryColor.startsWith("#") 
+      const encodedColor = embedConfig.primaryColor.startsWith("#")
         ? "%23" + embedConfig.primaryColor.slice(1)
         : embedConfig.primaryColor;
       params.append("primaryColor", encodedColor);
@@ -256,11 +285,25 @@ export default function ChatbotDetailPage() {
       params.append("borderRadius", embedConfig.borderRadius);
     }
     if (embedConfig.width) {
-      const widthValue = embedConfig.width + (embedConfig.width.includes("px") || embedConfig.width.includes("%") || embedConfig.width.includes("vw") || embedConfig.width.includes("vh") ? "" : "px");
+      const widthValue =
+        embedConfig.width +
+        (embedConfig.width.includes("px") ||
+        embedConfig.width.includes("%") ||
+        embedConfig.width.includes("vw") ||
+        embedConfig.width.includes("vh")
+          ? ""
+          : "px");
       params.append("width", widthValue);
     }
     if (embedConfig.height) {
-      const heightValue = embedConfig.height + (embedConfig.height.includes("px") || embedConfig.height.includes("%") || embedConfig.height.includes("vw") || embedConfig.height.includes("vh") ? "" : "px");
+      const heightValue =
+        embedConfig.height +
+        (embedConfig.height.includes("px") ||
+        embedConfig.height.includes("%") ||
+        embedConfig.height.includes("vw") ||
+        embedConfig.height.includes("vh")
+          ? ""
+          : "px");
       params.append("height", heightValue);
     }
     if (!embedConfig.showBranding) {
@@ -272,6 +315,9 @@ export default function ChatbotDetailPage() {
     if (embedConfig.placeholder) {
       params.append("placeholder", embedConfig.placeholder);
     }
+    if (embedConfig.autoSendFirstMessage) {
+      params.append("autoSendFirstMessage", embedConfig.autoSendFirstMessage);
+    }
     if (embedConfig.fontFamily) {
       params.append("fontFamily", embedConfig.fontFamily);
     }
@@ -279,20 +325,59 @@ export default function ChatbotDetailPage() {
       params.append("fontSize", embedConfig.fontSize);
     }
 
-    return `${baseUrl}/embed/chat?${params.toString()}`;
+    // Ensure we always have a base URL (absolute path)
+    // If baseUrl is empty, fall back to window.location.origin
+    let finalBaseUrl = baseUrl;
+    if (!finalBaseUrl || finalBaseUrl === "") {
+      if (
+        typeof window !== "undefined" &&
+        window.location &&
+        window.location.origin
+      ) {
+        finalBaseUrl = window.location.origin;
+      } else {
+        // This shouldn't happen in browser, but provide a fallback
+        finalBaseUrl = "";
+      }
+    }
+
+    // Always ensure we have an absolute URL (not relative)
+    if (!finalBaseUrl) {
+      console.warn(
+        "[Embed Code] Base URL is empty, using relative path. Set NEXT_PUBLIC_EMBED_BASE_URL or NEXT_PUBLIC_BASE_URL environment variable."
+      );
+    }
+
+    return finalBaseUrl
+      ? `${finalBaseUrl}/embed/chat?${params.toString()}`
+      : `/embed/chat?${params.toString()}`;
   };
 
   const getEmbedCode = () => {
     if (!chatbot) return "";
-    
+
     const baseUrl = getBaseUrl();
-    
+
     if (embedConfig.embedType === "iframe") {
       const embedUrl = getEmbedUrl();
-      const widthValue = embedConfig.width + (embedConfig.width.includes("px") || embedConfig.width.includes("%") || embedConfig.width.includes("vw") || embedConfig.width.includes("vh") ? "" : "px");
-      const heightValue = embedConfig.height + (embedConfig.height.includes("px") || embedConfig.height.includes("%") || embedConfig.height.includes("vw") || embedConfig.height.includes("vh") ? "" : "px");
+      const widthValue =
+        embedConfig.width +
+        (embedConfig.width.includes("px") ||
+        embedConfig.width.includes("%") ||
+        embedConfig.width.includes("vw") ||
+        embedConfig.width.includes("vh")
+          ? ""
+          : "px");
+      const heightValue =
+        embedConfig.height +
+        (embedConfig.height.includes("px") ||
+        embedConfig.height.includes("%") ||
+        embedConfig.height.includes("vw") ||
+        embedConfig.height.includes("vh")
+          ? ""
+          : "px");
       const borderRadiusValue = embedConfig.borderRadius;
-      
+
       return `<iframe
   src="${embedUrl}"
   width="${widthValue}"
@@ -305,7 +390,7 @@ export default function ChatbotDetailPage() {
       const config: string[] = [];
       config.push(`  mode: '${embedConfig.embedType}',`);
       config.push(`  chatbotId: '${chatbot.id}',`);
-      
+
       if (chatbot.organizationId) {
         config.push(`  organizationId: '${chatbot.organizationId}',`);
       }
@@ -319,44 +404,77 @@ export default function ChatbotDetailPage() {
         config.push(`  borderRadius: '${embedConfig.borderRadius}',`);
       }
       if (embedConfig.width) {
-        const widthValue = embedConfig.width + (embedConfig.width.includes("px") || embedConfig.width.includes("%") || embedConfig.width.includes("vw") || embedConfig.width.includes("vh") ? "" : "px");
+        const widthValue =
+          embedConfig.width +
+          (embedConfig.width.includes("px") ||
+          embedConfig.width.includes("%") ||
+          embedConfig.width.includes("vw") ||
+          embedConfig.width.includes("vh")
+            ? ""
+            : "px");
         config.push(`  width: '${widthValue}',`);
       }
       if (embedConfig.height) {
-        const heightValue = embedConfig.height + (embedConfig.height.includes("px") || embedConfig.height.includes("%") || embedConfig.height.includes("vw") || embedConfig.height.includes("vh") ? "" : "px");
+        const heightValue =
+          embedConfig.height +
+          (embedConfig.height.includes("px") ||
+          embedConfig.height.includes("%") ||
+          embedConfig.height.includes("vw") ||
+          embedConfig.height.includes("vh")
+            ? ""
+            : "px");
         config.push(`  height: '${heightValue}',`);
       }
       if (embedConfig.welcomeMessage) {
-        config.push(`  welcomeMessage: '${embedConfig.welcomeMessage.replace(/'/g, "\\'")}',`);
+        config.push(
+          `  welcomeMessage: '${embedConfig.welcomeMessage.replace(
+            /'/g,
+            "\\'"
+          )}',`
+        );
       }
       if (embedConfig.placeholder) {
-        config.push(`  placeholder: '${embedConfig.placeholder.replace(/'/g, "\\'")}',`);
+        config.push(
+          `  placeholder: '${embedConfig.placeholder.replace(/'/g, "\\'")}',`
+        );
       }
-      
+      if (embedConfig.autoSendFirstMessage) {
+        config.push(
+          `  autoSendFirstMessage: '${embedConfig.autoSendFirstMessage.replace(
+            /'/g,
+            "\\'"
+          )}',`
+        );
+      }
+
       if (embedConfig.embedType === "icon") {
         if (embedConfig.iconSize) {
-          const iconSizeValue = embedConfig.iconSize + (embedConfig.iconSize.includes("px") ? "" : "px");
+          const iconSizeValue =
+            embedConfig.iconSize +
+            (embedConfig.iconSize.includes("px") ? "" : "px");
           config.push(`  iconSize: '${iconSizeValue}',`);
         }
       }
-      
+
       if (embedConfig.position !== "bottom-right") {
         config.push(`  position: '${embedConfig.position}',`);
       }
-      
+
       if (embedConfig.embedType === "popup" && embedConfig.buttonText) {
-        config.push(`  buttonText: '${embedConfig.buttonText.replace(/'/g, "\\'")}',`);
+        config.push(
+          `  buttonText: '${embedConfig.buttonText.replace(/'/g, "\\'")}',`
+        );
       }
-      
+
       if (embedConfig.autoOpen) {
         config.push(`  autoOpen: true,`);
       }
-      
+
       // Join config and remove trailing comma from last item
       let configStr = config.join("\n");
       // Remove trailing comma from the last line
       configStr = configStr.replace(/,\s*$/, "");
-      
+
       return `<script src="${baseUrl}/eclipse-chat-widget.js"></script>
 <script>
   new EclipseChatWidget({
@@ -545,7 +663,8 @@ ${configStr}
         <CardContent className="space-y-6">
           <div>
             <p className="text-sm text-muted-foreground mb-4">
-              Configure the embed options below. The embed code will update automatically based on your selection.
+              Configure the embed options below. The embed code will update
+              automatically based on your selection.
             </p>
           </div>
 
@@ -564,13 +683,18 @@ ${configStr}
               <SelectContent>
                 <SelectItem value="iframe">Inline iframe</SelectItem>
                 <SelectItem value="icon">Icon Mode (Floating Icon)</SelectItem>
-                <SelectItem value="popup">Popup Mode (Floating Button)</SelectItem>
+                <SelectItem value="popup">
+                  Popup Mode (Floating Button)
+                </SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              {embedConfig.embedType === "iframe" && "Direct iframe embed - best for embedding in a specific location"}
-              {embedConfig.embedType === "icon" && "Floating icon button (Intercom-style) - expands to full chat window"}
-              {embedConfig.embedType === "popup" && "Floating button with text - expands to full chat window"}
+              {embedConfig.embedType === "iframe" &&
+                "Direct iframe embed - best for embedding in a specific location"}
+              {embedConfig.embedType === "icon" &&
+                "Floating icon button (Intercom-style) - expands to full chat window"}
+              {embedConfig.embedType === "popup" &&
+                "Floating button with text - expands to full chat window"}
             </p>
           </div>
 
@@ -602,7 +726,10 @@ ${configStr}
                   type="color"
                   value={embedConfig.primaryColor}
                   onChange={(e) =>
-                    setEmbedConfig((prev) => ({ ...prev, primaryColor: e.target.value }))
+                    setEmbedConfig((prev) => ({
+                      ...prev,
+                      primaryColor: e.target.value,
+                    }))
                   }
                   className="w-16 h-10 p-1"
                 />
@@ -610,7 +737,10 @@ ${configStr}
                   type="text"
                   value={embedConfig.primaryColor}
                   onChange={(e) =>
-                    setEmbedConfig((prev) => ({ ...prev, primaryColor: e.target.value }))
+                    setEmbedConfig((prev) => ({
+                      ...prev,
+                      primaryColor: e.target.value,
+                    }))
                   }
                   placeholder="#3b82f6"
                   className="flex-1"
@@ -624,7 +754,10 @@ ${configStr}
                 id="borderRadius"
                 value={embedConfig.borderRadius}
                 onChange={(e) =>
-                  setEmbedConfig((prev) => ({ ...prev, borderRadius: e.target.value }))
+                  setEmbedConfig((prev) => ({
+                    ...prev,
+                    borderRadius: e.target.value,
+                  }))
                 }
                 placeholder="8px"
               />
@@ -648,7 +781,10 @@ ${configStr}
                 id="height"
                 value={embedConfig.height}
                 onChange={(e) =>
-                  setEmbedConfig((prev) => ({ ...prev, height: e.target.value }))
+                  setEmbedConfig((prev) => ({
+                    ...prev,
+                    height: e.target.value,
+                  }))
                 }
                 placeholder="600px or 100vh"
               />
@@ -660,7 +796,10 @@ ${configStr}
                 id="welcomeMessage"
                 value={embedConfig.welcomeMessage}
                 onChange={(e) =>
-                  setEmbedConfig((prev) => ({ ...prev, welcomeMessage: e.target.value }))
+                  setEmbedConfig((prev) => ({
+                    ...prev,
+                    welcomeMessage: e.target.value,
+                  }))
                 }
                 placeholder="Hello! How can I help you today?"
               />
@@ -672,10 +811,35 @@ ${configStr}
                 id="placeholder"
                 value={embedConfig.placeholder}
                 onChange={(e) =>
-                  setEmbedConfig((prev) => ({ ...prev, placeholder: e.target.value }))
+                  setEmbedConfig((prev) => ({
+                    ...prev,
+                    placeholder: e.target.value,
+                  }))
                 }
                 placeholder="Type your message..."
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="autoSendFirstMessage">
+                Auto-Send First Message
+              </Label>
+              <Input
+                id="autoSendFirstMessage"
+                value={embedConfig.autoSendFirstMessage}
+                onChange={(e) =>
+                  setEmbedConfig((prev) => ({
+                    ...prev,
+                    autoSendFirstMessage: e.target.value,
+                  }))
+                }
+                placeholder="Hello! (optional - auto-sends when chat opens)"
+              />
+              <p className="text-xs text-muted-foreground">
+                This message will be displayed as an assistant message on the
+                support rep side (left side) when a new chat opens (for new
+                chats only, no API call - saves costs)
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -684,7 +848,10 @@ ${configStr}
                 id="fontFamily"
                 value={embedConfig.fontFamily}
                 onChange={(e) =>
-                  setEmbedConfig((prev) => ({ ...prev, fontFamily: e.target.value }))
+                  setEmbedConfig((prev) => ({
+                    ...prev,
+                    fontFamily: e.target.value,
+                  }))
                 }
                 placeholder="Inter, Arial, sans-serif"
               />
@@ -696,7 +863,10 @@ ${configStr}
                 id="fontSize"
                 value={embedConfig.fontSize}
                 onChange={(e) =>
-                  setEmbedConfig((prev) => ({ ...prev, fontSize: e.target.value }))
+                  setEmbedConfig((prev) => ({
+                    ...prev,
+                    fontSize: e.target.value,
+                  }))
                 }
                 placeholder="16px"
               />
@@ -710,7 +880,10 @@ ${configStr}
                   id="iconSize"
                   value={embedConfig.iconSize}
                   onChange={(e) =>
-                    setEmbedConfig((prev) => ({ ...prev, iconSize: e.target.value }))
+                    setEmbedConfig((prev) => ({
+                      ...prev,
+                      iconSize: e.target.value,
+                    }))
                   }
                   placeholder="60px"
                 />
@@ -724,21 +897,30 @@ ${configStr}
                   id="buttonText"
                   value={embedConfig.buttonText}
                   onChange={(e) =>
-                    setEmbedConfig((prev) => ({ ...prev, buttonText: e.target.value }))
+                    setEmbedConfig((prev) => ({
+                      ...prev,
+                      buttonText: e.target.value,
+                    }))
                   }
                   placeholder="Chat with us"
                 />
               </div>
             )}
 
-            {(embedConfig.embedType === "icon" || embedConfig.embedType === "popup") && (
+            {(embedConfig.embedType === "icon" ||
+              embedConfig.embedType === "popup") && (
               <div className="space-y-2">
                 <Label htmlFor="position">Position</Label>
                 <Select
                   value={embedConfig.position}
-                  onValueChange={(value: "bottom-right" | "bottom-left" | "top-right" | "top-left" | "center") =>
-                    setEmbedConfig((prev) => ({ ...prev, position: value }))
-                  }
+                  onValueChange={(
+                    value:
+                      | "bottom-right"
+                      | "bottom-left"
+                      | "top-right"
+                      | "top-left"
+                      | "center"
+                  ) => setEmbedConfig((prev) => ({ ...prev, position: value }))}
                 >
                   <SelectTrigger id="position">
                     <SelectValue />
@@ -760,7 +942,10 @@ ${configStr}
               id="showBranding"
               checked={embedConfig.showBranding}
               onCheckedChange={(checked) =>
-                setEmbedConfig((prev) => ({ ...prev, showBranding: checked === true }))
+                setEmbedConfig((prev) => ({
+                  ...prev,
+                  showBranding: checked === true,
+                }))
               }
             />
             <Label
@@ -771,13 +956,17 @@ ${configStr}
             </Label>
           </div>
 
-          {(embedConfig.embedType === "icon" || embedConfig.embedType === "popup") && (
+          {(embedConfig.embedType === "icon" ||
+            embedConfig.embedType === "popup") && (
             <div className="flex items-center space-x-2">
               <Checkbox
                 id="autoOpen"
                 checked={embedConfig.autoOpen}
                 onCheckedChange={(checked) =>
-                  setEmbedConfig((prev) => ({ ...prev, autoOpen: checked === true }))
+                  setEmbedConfig((prev) => ({
+                    ...prev,
+                    autoOpen: checked === true,
+                  }))
                 }
               />
               <Label
@@ -796,12 +985,19 @@ ${configStr}
               <div className="bg-muted p-4 rounded-lg flex justify-center items-center">
                 <div
                   style={{
-                    width: embedConfig.width.includes("%") || embedConfig.width.includes("vw") || embedConfig.width.includes("vh") 
-                      ? "100%" 
-                      : embedConfig.width + (embedConfig.width.includes("px") ? "" : "px"),
-                    height: embedConfig.height.includes("%") || embedConfig.height.includes("vh") 
-                      ? "600px" 
-                      : embedConfig.height + (embedConfig.height.includes("px") ? "" : "px"),
+                    width:
+                      embedConfig.width.includes("%") ||
+                      embedConfig.width.includes("vw") ||
+                      embedConfig.width.includes("vh")
+                        ? "100%"
+                        : embedConfig.width +
+                          (embedConfig.width.includes("px") ? "" : "px"),
+                    height:
+                      embedConfig.height.includes("%") ||
+                      embedConfig.height.includes("vh")
+                        ? "600px"
+                        : embedConfig.height +
+                          (embedConfig.height.includes("px") ? "" : "px"),
                     maxWidth: "100%",
                     borderRadius: embedConfig.borderRadius,
                     overflow: "hidden",
@@ -824,14 +1020,16 @@ ${configStr}
             </div>
           )}
 
-          {(embedConfig.embedType === "icon" || embedConfig.embedType === "popup") && (
+          {(embedConfig.embedType === "icon" ||
+            embedConfig.embedType === "popup") && (
             <div className="space-y-2">
               <Label>Preview Note</Label>
               <div className="bg-muted p-4 rounded-lg">
                 <p className="text-sm text-muted-foreground">
-                  Widget modes (icon/popup) create a floating button that appears on your website. 
-                  The preview will be available when you embed the code on your site. 
-                  Copy the code below and include it in your HTML to see the widget in action.
+                  Widget modes (icon/popup) create a floating button that
+                  appears on your website. The preview will be available when
+                  you embed the code on your site. Copy the code below and
+                  include it in your HTML to see the widget in action.
                 </p>
               </div>
             </div>
