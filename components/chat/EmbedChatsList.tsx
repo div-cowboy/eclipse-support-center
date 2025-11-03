@@ -2,14 +2,8 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/shadcn/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/shadcn/ui/card";
-import { Badge } from "@/components/shadcn/ui/badge";
-import { MessageSquare, Plus, Trash2, Clock, Bot, Circle } from "lucide-react";
+import { Card, CardContent, CardHeader } from "@/components/shadcn/ui/card";
+import { MessageSquare, Plus, Trash2, Clock, X } from "lucide-react";
 import {
   getChatSessions,
   deleteChatSession,
@@ -33,12 +27,11 @@ export function EmbedChatsList({
   chatbotId,
   onSelectChat,
   onNewChat,
-  chatbotInfo,
 }: EmbedChatsListProps) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const loadSessions = useCallback(() => {
+  const loadSessions = useCallback(async () => {
     const chatSessions = getChatSessions(chatbotId);
 
     // Calculate unread status for each session
@@ -58,6 +51,46 @@ export function EmbedChatsList({
         unreadCount: hasUnread ? 1 : 0,
       };
     });
+
+    // Fetch actual last messages for sessions with generic previews
+    const sessionsToUpdate = sessionsWithUnread.filter(
+      (session) =>
+        !session.preview ||
+        session.preview === "New conversation" ||
+        session.preview === "Recent message" ||
+        session.preview === "New message received"
+    );
+
+    // Update previews from API
+    for (const session of sessionsToUpdate) {
+      try {
+        const response = await fetch(`/api/embed/chats/${session.id}`);
+        if (response.ok) {
+          const chatData = await response.json();
+          const messages = chatData.messages || [];
+          if (messages.length > 0) {
+            // Messages are ordered by createdAt asc, so last one is most recent
+            const lastMessage = messages[messages.length - 1];
+            if (lastMessage?.content) {
+              const preview =
+                lastMessage.content.length > 60
+                  ? lastMessage.content.substring(0, 60) + "..."
+                  : lastMessage.content;
+              updateChatSession(session.id, { preview });
+              // Update local session
+              const index = sessionsWithUnread.findIndex(
+                (s) => s.id === session.id
+              );
+              if (index >= 0) {
+                sessionsWithUnread[index].preview = preview;
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error fetching preview for chat ${session.id}:`, error);
+      }
+    }
 
     setSessions(sessionsWithUnread);
   }, [chatbotId]);
@@ -130,33 +163,36 @@ export function EmbedChatsList({
 
   return (
     <Card className="h-full flex flex-col border-0 shadow-none">
-      <CardHeader className="pb-3 border-b">
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Bot className="h-5 w-5" />
-          {chatbotInfo?.name || "AI Assistant"}
-        </CardTitle>
-        {chatbotInfo?.description && (
-          <p className="text-sm text-muted-foreground">
-            {chatbotInfo.description}
-          </p>
-        )}
+      <CardHeader className="pb-3 px-4 flex-shrink-0 border-b border-[#E0E0E0]">
+        {/* Simplified Header with Flexbox Layout */}
+        <div className="flex items-center justify-between gap-4">
+          {/* Left: Back Button */}
+          <div className="flex-shrink-0">
+            <div className="h-8 w-8" />
+          </div>
+
+          {/* Center: Title */}
+          <div className="flex-1 flex items-center justify-center">
+            <h2 className="text-lg font-semibold">Chats</h2>
+          </div>
+
+          {/* Right: Close Button */}
+          <div className="flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              // onClick={onClose}
+              className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-all"
+            >
+              <X className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+            </Button>
+          </div>
+        </div>
       </CardHeader>
 
-      <CardContent className="flex-1 flex flex-col p-0">
-        {/* New Chat Button */}
-        <div className="p-4 border-b fixed bottom-0 left-0 z-1000 right-0 flex justify-center items-center">
-          <Button
-            onClick={onNewChat}
-            className="w-auto max-w-[120px] mx-auto bg-black rounded-full text-white hover:bg-black/90 transition-all duration-300"
-            size="lg"
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            New Chat
-          </Button>
-        </div>
-
-        {/* Chats List */}
-        <div className="flex-1 overflow-y-auto">
+      <CardContent className="flex-1 flex flex-col p-0 overflow-hidden relative">
+        {/* Chats List - Scrollable */}
+        <div className="flex-1 overflow-y-auto scroll-smooth pb-20">
           {sessions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
@@ -174,7 +210,7 @@ export function EmbedChatsList({
               {sessions.map((session) => (
                 <div
                   key={session.id}
-                  className={`p-4 hover:bg-muted/50 cursor-pointer transition-colors group relative ${
+                  className={`p-4 hover:bg-muted/50 cursor-pointer border-[#E0E0E0] transition-colors group relative ${
                     deletingId === session.id ? "opacity-50" : ""
                   }`}
                   onClick={() => onSelectChat(session.id)}
@@ -187,30 +223,19 @@ export function EmbedChatsList({
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="text-sm font-medium truncate">
-                          Chat {session.id.slice(0, 8)}
-                        </h4>
-                        <Badge variant="secondary" className="text-xs">
-                          {session.messageCount} msg
-                        </Badge>
-                        {(session.unreadCount || 0) > 0 && (
-                          <Badge
-                            variant="destructive"
-                            className="text-xs flex items-center gap-1"
-                          >
-                            <Circle className="h-2 w-2 fill-current" />
-                            {session.unreadCount} new
-                          </Badge>
-                        )}
-                      </div>
-
-                      {session.preview && (
-                        <p className="text-sm text-muted-foreground truncate mb-2">
-                          {session.preview}
-                        </p>
+                      {/* Unread indicator */}
+                      {(session.unreadCount || 0) > 0 && (
+                        <div className="absolute top-4 right-12">
+                          <div className="w-2 h-2 bg-blue-600 rounded-full" />
+                        </div>
                       )}
 
+                      {/* First line: Truncated last message */}
+                      <p className="text-sm text-muted-foreground truncate mb-1">
+                        {session.preview || "New conversation"}
+                      </p>
+
+                      {/* Second line: Time */}
                       <div className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Clock className="h-3 w-3" />
                         {formatDate(session.lastMessageAt)}
@@ -231,6 +256,18 @@ export function EmbedChatsList({
               ))}
             </div>
           )}
+        </div>
+
+        {/* New Chat Button - Fixed at bottom */}
+        <div className="absolute bottom-0 left-0 right-0 p-4 flex justify-center items-center bg-background  flex-shrink-0">
+          <Button
+            onClick={onNewChat}
+            className="w-auto max-w-[120px] gap-0 mx-auto bg-black rounded-full text-white hover:bg-black/90 transition-all duration-300"
+            size="lg"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            New Chat
+          </Button>
         </div>
       </CardContent>
     </Card>

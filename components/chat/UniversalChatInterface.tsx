@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/shadcn/ui/button";
-import { Input } from "@/components/shadcn/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/shadcn/ui/card";
 import { Badge } from "@/components/shadcn/ui/badge";
 import {
@@ -19,6 +18,7 @@ import {
   ArrowLeft,
   X,
 } from "lucide-react";
+import { BarLoader } from "react-spinners";
 import { TypingIndicator } from "./TypingIndicator";
 import { useRealtimeChat } from "../hooks/useRealtimeChat";
 import type { RealtimeChatMessage } from "../hooks/useRealtimeChat";
@@ -160,6 +160,7 @@ export function UniversalChatInterface({
   const [showTicketModal, setShowTicketModal] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Real-time chat hook - handles message broadcasting
   const { sendMessage: sendRealtimeMessage } = useRealtimeChat({
@@ -399,6 +400,15 @@ export function UniversalChatInterface({
   useEffect(() => {
     scrollToBottom();
   }, [messages, streamingContent]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      const newHeight = Math.min(textareaRef.current.scrollHeight, 100);
+      textareaRef.current.style.height = `${newHeight}px`;
+    }
+  }, [inputMessage]);
 
   const sendMessage = async (
     message: string,
@@ -901,38 +911,37 @@ export function UniversalChatInterface({
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
-            {/* Loading existing chat history */}
-            {isLoadingHistory && messages.length === 0 && (
+            {/* Combined loading state - shows when loading chat info or history */}
+            {(isLoadingHistory ||
+              (!chatInfo &&
+                messages.length === 0 &&
+                config.type !== "traditional")) && (
               <div className="flex flex-col items-center justify-center py-8 text-center">
-                <div className="relative mb-4">
-                  <MessageSquare className="h-12 w-12 text-muted-foreground animate-pulse" />
-                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full animate-bounce" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">
-                  Loading conversation...
-                </h3>
-                <p className="text-muted-foreground max-w-sm">
-                  Fetching your chat history
-                </p>
+                <BarLoader
+                  color="#000"
+                  height={4}
+                  width={100}
+                  className="mb-4"
+                />
               </div>
             )}
 
             {/* Empty state (only for new chats when not loading) */}
-            {!isLoadingHistory && messages.length === 0 && !chatInfo && (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">
-                  {config.type === "traditional"
-                    ? "Start a conversation"
-                    : "Loading chat..."}
-                </h3>
-                <p className="text-muted-foreground max-w-sm">
-                  {config.type === "traditional"
-                    ? "Send us a message and our support team will get back to you as soon as possible."
-                    : "Please wait while we set up your conversation."}
-                </p>
-              </div>
-            )}
+            {!isLoadingHistory &&
+              messages.length === 0 &&
+              chatInfo &&
+              config.type === "traditional" && (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    Start a conversation
+                  </h3>
+                  <p className="text-muted-foreground max-w-sm">
+                    Send us a message and our support team will get back to you
+                    as soon as possible.
+                  </p>
+                </div>
+              )}
 
             {messages.map((message, index) => {
               // Check for handoff message in traditional chat
@@ -1235,24 +1244,37 @@ export function UniversalChatInterface({
           )}
 
           {/* Input */}
-          <div className="border-t p-4 flex-shrink-0">
-            <form onSubmit={handleSubmit} className="flex gap-3">
-              <Input
+          <div className="border-t border-[#E0E0E0] p-4 flex-shrink-0">
+            <form onSubmit={handleSubmit} className="flex gap-3 items-end">
+              <textarea
+                ref={textareaRef}
                 value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
+                onChange={(e) => {
+                  setInputMessage(e.target.value);
+                }}
                 placeholder={
                   escalationActivated
                     ? "Message customer support..."
                     : config.placeholder || "Type your message..."
                 }
-                disabled={isLoading}
-                className="flex-1"
+                className="flex-1 min-h-[40px] max-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm resize-none overflow-y-auto"
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
                 spellCheck="false"
                 name="chat-message"
-                type="text"
+                rows={1}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (inputMessage.trim() && !isLoading) {
+                      sendMessage(
+                        inputMessage,
+                        config.features.streaming || false
+                      );
+                    }
+                  }
+                }}
                 data-lpignore="true"
                 data-1p-ignore="true"
                 data-form-type="other"
@@ -1260,10 +1282,10 @@ export function UniversalChatInterface({
               <Button
                 type="submit"
                 disabled={isLoading || !inputMessage.trim()}
-                className="px-4"
+                className="px-4 bg-black text-white h-[40px] flex-shrink-0"
               >
-                <Send className="h-4 w-4 mr-2" />
                 Send
+                <Send className="h-3 w-3" />
               </Button>
             </form>
           </div>

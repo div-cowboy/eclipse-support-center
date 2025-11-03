@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { ClipLoader } from "react-spinners";
 import { UniversalChatInterface } from "@/components/chat/UniversalChatInterface";
 import { EmbedChatsList } from "@/components/chat/EmbedChatsList";
 import {
@@ -190,46 +191,72 @@ function EmbedChatContent() {
     [config.chatbotId, chatId]
   );
 
-  const handleMessageSent = useCallback(() => {
-    console.log("[EmbedChat] Message sent:", { chatId, isEscalated });
-
-    // Update chat session in localStorage after successful message
-    if (storageAvailable && chatId && config.chatbotId) {
-      const now = new Date().toISOString();
-      updateChatSession(chatId, {
-        lastMessageAt: now,
-        messageCount: 1, // This will be incremented by the backend
-        preview: "Recent message",
-        // Mark as viewed since user is actively in the chat
-        lastViewedAt: now,
+  const handleMessageSent = useCallback(
+    (message: { content: string; role: string }) => {
+      console.log("[EmbedChat] Message sent:", {
+        chatId,
+        isEscalated,
+        message,
       });
-    }
-  }, [chatId, isEscalated, storageAvailable, config.chatbotId]);
 
-  const handleMessageReceived = useCallback(() => {
-    console.log("[EmbedChat] Message received:", { chatId, isEscalated, view });
+      // Update chat session in localStorage after successful message
+      if (storageAvailable && chatId && config.chatbotId) {
+        const now = new Date().toISOString();
+        // Truncate message content for preview
+        const preview =
+          message.content.length > 60
+            ? message.content.substring(0, 60) + "..."
+            : message.content;
 
-    // Update chat session in localStorage when AI/agent responds
-    if (storageAvailable && chatId && config.chatbotId) {
-      const now = new Date().toISOString();
-
-      // If user is actively viewing this chat, mark as viewed
-      // Otherwise, only update lastMessageAt (will show as unread)
-      if (view === "chat") {
         updateChatSession(chatId, {
           lastMessageAt: now,
-          preview: "New message received",
-          lastViewedAt: now, // Mark as viewed since user is watching
-        });
-      } else {
-        updateChatSession(chatId, {
-          lastMessageAt: now,
-          preview: "New message received",
-          // Don't update lastViewedAt - user isn't viewing this chat
+          messageCount: 1, // This will be incremented by the backend
+          preview: preview,
+          // Mark as viewed since user is actively in the chat
+          lastViewedAt: now,
         });
       }
-    }
-  }, [chatId, isEscalated, storageAvailable, config.chatbotId, view]);
+    },
+    [chatId, isEscalated, storageAvailable, config.chatbotId]
+  );
+
+  const handleMessageReceived = useCallback(
+    (message: { content: string; role: string }) => {
+      console.log("[EmbedChat] Message received:", {
+        chatId,
+        isEscalated,
+        view,
+        message,
+      });
+
+      // Update chat session in localStorage when AI/agent responds
+      if (storageAvailable && chatId && config.chatbotId) {
+        const now = new Date().toISOString();
+        // Truncate message content for preview
+        const preview =
+          message.content.length > 60
+            ? message.content.substring(0, 60) + "..."
+            : message.content;
+
+        // If user is actively viewing this chat, mark as viewed
+        // Otherwise, only update lastMessageAt (will show as unread)
+        if (view === "chat") {
+          updateChatSession(chatId, {
+            lastMessageAt: now,
+            preview: preview,
+            lastViewedAt: now, // Mark as viewed since user is watching
+          });
+        } else {
+          updateChatSession(chatId, {
+            lastMessageAt: now,
+            preview: preview,
+            // Don't update lastViewedAt - user isn't viewing this chat
+          });
+        }
+      }
+    },
+    [chatId, isEscalated, storageAvailable, config.chatbotId, view]
+  );
 
   // Log current state for debugging
   useEffect(() => {
@@ -384,9 +411,11 @@ function EmbedChatLoading() {
       <div className="h-full flex flex-col border-0 shadow-none">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <div className="h-12 w-12 text-muted-foreground mb-4">
-              Loading...
-            </div>
+            <ClipLoader
+              color="hsl(var(--primary))"
+              size={40}
+              className="mb-4"
+            />
             <h3 className="text-lg font-semibold mb-2">Loading chat...</h3>
             <p className="text-muted-foreground max-w-sm">
               Please wait while we set up your conversation.
