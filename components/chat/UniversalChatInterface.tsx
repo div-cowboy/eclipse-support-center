@@ -3,12 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/shadcn/ui/button";
 import { Input } from "@/components/shadcn/ui/input";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/shadcn/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/shadcn/ui/card";
 import { Badge } from "@/components/shadcn/ui/badge";
 import {
   Send,
@@ -20,14 +15,14 @@ import {
   PhoneCall,
   Clock,
   CheckCircle,
-  Eye,
-  EyeOff,
   Bug,
   ArrowLeft,
+  X,
 } from "lucide-react";
 import { TypingIndicator } from "./TypingIndicator";
 import { useRealtimeChat } from "../hooks/useRealtimeChat";
 import type { RealtimeChatMessage } from "../hooks/useRealtimeChat";
+import { CreateTicketFromChatModal } from "../tickets/CreateTicketFromChatModal";
 
 // Universal message interface that covers all use cases
 interface ChatMessage {
@@ -119,6 +114,7 @@ export interface ChatConfig {
   onMessageSent?: (message: ChatMessage) => void;
   onMessageReceived?: (message: ChatMessage) => void;
   onBackToList?: () => void;
+  onClose?: () => void; // Close button callback
 }
 
 interface UniversalChatInterfaceProps {
@@ -161,6 +157,7 @@ export function UniversalChatInterface({
   } | null>(null);
   const [hasShownWelcome, setHasShownWelcome] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
+  const [showTicketModal, setShowTicketModal] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -713,13 +710,8 @@ export function UniversalChatInterface({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    sendMessage(inputMessage, false);
-  };
-
-  const handleStreamingSubmit = () => {
-    if (inputMessage.trim() && config.features.streaming) {
-      sendMessage(inputMessage, true);
-    }
+    // Use streaming if available, otherwise use regular mode
+    sendMessage(inputMessage, config.features.streaming || false);
   };
 
   const handleConnectSupport = async () => {
@@ -814,17 +806,6 @@ export function UniversalChatInterface({
     }
   };
 
-  const getStatusColor = (status?: string) => {
-    switch (status) {
-      case "resolved":
-        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200";
-      case "escalated":
-        return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200";
-      default:
-        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200";
-    }
-  };
-
   // Apply custom styling
   const containerStyle: React.CSSProperties = {
     ...(config.height && { height: config.height }),
@@ -849,119 +830,77 @@ export function UniversalChatInterface({
         />
       )}
       <Card
-        className={`flex flex-col ${config.className || ""}`}
+        className={`flex flex-col h-full ${config.className || ""}`}
         style={containerStyle}
       >
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center gap-2">
-            {/* Back to list button */}
-            {config.features.multiChat && config.onBackToList && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={config.onBackToList}
-                className="mr-2 -ml-2"
-              >
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Chats
-              </Button>
-            )}
+        <CardHeader className="pb-3 px-4 flex-shrink-0 border-b border-[#E0E0E0]">
+          {/* Simplified Header with Flexbox Layout */}
+          <div className="flex items-center justify-between gap-4">
+            {/* Left: Back Button */}
+            <div className="flex-shrink-0">
+              {config.features.multiChat && config.onBackToList ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={config.onBackToList}
+                  className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-all"
+                >
+                  <ArrowLeft className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                </Button>
+              ) : (
+                <div className="h-8 w-8" /> // Placeholder for alignment
+              )}
+            </div>
 
-            {/* Main title with appropriate icon */}
-            {escalationActivated ? (
-              <>
-                <User
-                  className={`h-5 w-5 ${
-                    awaitingSupport ? "text-amber-600" : "text-green-600"
-                  }`}
-                />
-                <span>Customer Support</span>
-                {awaitingSupport ? (
-                  <Badge
-                    variant="default"
-                    className="ml-2 bg-amber-500 hover:bg-amber-500 text-white text-xs animate-pulse"
-                  >
-                    <Clock className="h-3 w-3 mr-1" />
-                    Awaiting Response
-                  </Badge>
-                ) : (
-                  <Badge
-                    variant="default"
-                    className="ml-2 bg-green-600 text-xs"
-                  >
-                    Live
-                  </Badge>
-                )}
-              </>
-            ) : (
-              <>
-                <Bot className="h-5 w-5" />
-                {config.title || chatInfo?.name || "AI Assistant"}
-              </>
-            )}
+            {/* Center: Title */}
+            <div className="flex-1 flex items-center justify-center">
+              <h2 className="text-lg font-semibold">
+                {escalationActivated ? "Support" : "Chat"}
+              </h2>
+              {awaitingSupport && (
+                <Badge
+                  variant="default"
+                  className="ml-2 bg-amber-500 hover:bg-amber-500 text-white text-xs animate-pulse"
+                >
+                  <Clock className="h-3 w-3 mr-1" />
+                  Connecting...
+                </Badge>
+              )}
+              {escalationActivated && !awaitingSupport && (
+                <Badge variant="default" className="ml-2 bg-green-600 text-xs">
+                  Live
+                </Badge>
+              )}
+            </div>
 
-            {/* Feature badges */}
-            {chatInfo && !escalationActivated && (
-              <div className="flex gap-2 ml-auto">
-                {config.features.debugMode && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setDebugMode(!debugMode)}
-                    className="text-xs"
-                  >
-                    {debugMode ? (
-                      <EyeOff className="h-3 w-3 mr-1" />
-                    ) : (
-                      <Eye className="h-3 w-3 mr-1" />
-                    )}
-                    {debugMode ? "Hide Debug" : "Show Debug"}
-                  </Button>
-                )}
-                {config.features.contextBlocks &&
-                  chatInfo._count?.contextBlocks && (
-                    <Badge variant="outline" className="text-xs">
-                      {chatInfo._count.contextBlocks} context blocks
-                    </Badge>
-                  )}
-                {config.features.showBranding && chatInfo.organization && (
-                  <Badge variant="outline" className="text-xs">
-                    <Building2 className="h-3 w-3 mr-1" />
-                    {chatInfo.organization.name}
-                  </Badge>
-                )}
-                {config.features.showStatus && chatInfo.status && (
-                  <Badge
-                    variant="outline"
-                    className={`text-xs ${getStatusColor(chatInfo.status)}`}
-                  >
-                    {chatInfo.status}
-                  </Badge>
-                )}
-                {chatInfo._count?.messages && (
-                  <Badge variant="outline" className="text-xs">
-                    {chatInfo._count.messages} messages
-                  </Badge>
-                )}
-              </div>
-            )}
-          </CardTitle>
+            {/* Right: Close Button */}
+            <div className="flex-shrink-0">
+              {config.onClose ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={config.onClose}
+                  className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-all"
+                >
+                  <X className="h-4 w-4 text-gray-600 dark:text-gray-400" />
+                </Button>
+              ) : (
+                <div className="h-8 w-8" /> // Placeholder for alignment
+              )}
+            </div>
+          </div>
 
-          {config.description && !escalationActivated && (
-            <p className="text-sm text-muted-foreground">
-              {config.description}
-            </p>
-          )}
+          {/* Optional subtitle for awaiting support state */}
           {awaitingSupport && (
-            <p className="text-sm text-amber-600 dark:text-amber-400">
+            <p className="text-sm text-amber-600 dark:text-amber-400 text-center mt-2">
               Connecting you with a support representative...
             </p>
           )}
         </CardHeader>
 
-        <CardContent className="flex-1 flex flex-col p-0">
+        <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
             {/* Loading existing chat history */}
             {isLoadingHistory && messages.length === 0 && (
               <div className="flex flex-col items-center justify-center py-8 text-center">
@@ -1269,7 +1208,7 @@ export function UniversalChatInterface({
 
           {/* Escalation Button */}
           {config.features.escalation && escalationRequested && (
-            <div className="border-t border-b bg-blue-50 dark:bg-blue-950 p-4">
+            <div className="border-t border-b bg-blue-50 dark:bg-blue-950 p-4 flex-shrink-0">
               <div className="flex items-start gap-3">
                 <div className="flex-shrink-0">
                   <AlertCircle className="h-5 w-5 text-blue-600 dark:text-blue-400" />
@@ -1296,8 +1235,8 @@ export function UniversalChatInterface({
           )}
 
           {/* Input */}
-          <div className="border-t p-4">
-            <form onSubmit={handleSubmit} className="flex gap-2">
+          <div className="border-t p-4 flex-shrink-0">
+            <form onSubmit={handleSubmit} className="flex gap-3">
               <Input
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
@@ -1321,23 +1260,30 @@ export function UniversalChatInterface({
               <Button
                 type="submit"
                 disabled={isLoading || !inputMessage.trim()}
+                className="px-4"
               >
-                <Send className="h-4 w-4" />
+                <Send className="h-4 w-4 mr-2" />
+                Send
               </Button>
-              {config.features.streaming && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleStreamingSubmit}
-                  disabled={isLoading || !inputMessage.trim()}
-                >
-                  Stream
-                </Button>
-              )}
             </form>
           </div>
         </CardContent>
       </Card>
+
+      {/* Create Ticket Modal */}
+      {config.chatId && config.organizationId && (
+        <CreateTicketFromChatModal
+          chatId={config.chatId}
+          organizationId={config.organizationId}
+          isOpen={showTicketModal}
+          onClose={() => setShowTicketModal(false)}
+          onSuccess={(ticket) => {
+            setShowTicketModal(false);
+            // Could show a toast notification here
+            console.log("Ticket created successfully:", ticket);
+          }}
+        />
+      )}
     </>
   );
 }

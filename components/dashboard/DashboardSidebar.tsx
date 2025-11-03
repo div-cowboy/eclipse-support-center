@@ -14,13 +14,14 @@ import {
   SidebarMenuItem,
 } from "@/components/shadcn/ui/sidebar";
 import { navigationLinks } from "@/lib/navigation";
-import { LayoutDashboard, MessageSquare, Building2, Bot } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Building2, Bot, Ticket } from "lucide-react";
 
 const iconMap = {
   LayoutDashboard,
   MessageSquare,
   Building2,
   Bot,
+  Ticket,
 };
 
 interface DashboardSidebarProps {

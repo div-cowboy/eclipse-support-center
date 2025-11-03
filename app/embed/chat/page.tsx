@@ -131,6 +131,13 @@ function EmbedChatContent() {
     setView("list");
   }, []);
 
+  const handleClose = useCallback(() => {
+    // Send message to parent window to close the widget
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "eclipse-chat-close" }, "*");
+    }
+  }, []);
+
   const handleChatCreated = useCallback(
     (newChatId: string) => {
       console.log(
@@ -276,6 +283,7 @@ function EmbedChatContent() {
       onMessageSent: handleMessageSent,
       onMessageReceived: handleMessageReceived,
       onBackToList: handleBackToList,
+      onClose: handleClose,
     };
   }, [
     chatId,
@@ -298,6 +306,7 @@ function EmbedChatContent() {
     handleMessageSent,
     handleMessageReceived,
     handleBackToList,
+    handleClose,
   ]);
 
   // Apply custom styling based on configuration
@@ -325,7 +334,10 @@ function EmbedChatContent() {
             }}
           />
         )}
-        <div className="h-screen w-full bg-background" style={containerStyle}>
+        <div
+          className="h-screen w-full bg-background flex flex-col"
+          style={containerStyle}
+        >
           <EmbedChatsList
             chatbotId={config.chatbotId || ""}
             onSelectChat={handleSelectChat}
@@ -355,7 +367,10 @@ function EmbedChatContent() {
           }}
         />
       )}
-      <div className="h-screen w-full bg-background" style={containerStyle}>
+      <div
+        className="h-screen w-full bg-background flex flex-col"
+        style={containerStyle}
+      >
         <UniversalChatInterface config={chatConfig} />
       </div>
     </>

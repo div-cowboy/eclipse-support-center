@@ -22,6 +22,7 @@ async function main() {
     create: {
       id: "demo-org",
       name: "Eclipse Support Center",
+      slug: "eclipse-demo",
       description:
         "Demo organization for Eclipse Support Center. This is a sample organization that showcases the AI-powered support chatbot capabilities.",
       users: {
@@ -42,8 +43,10 @@ async function main() {
       description:
         "I'm a demo AI assistant for Eclipse Support Center. I can help answer questions and provide support!",
       status: "ACTIVE",
-      systemPrompt:
-        "You are a helpful AI assistant for Eclipse Support Center. Be friendly, professional, and concise. Help users with their questions about the platform.",
+      config: {
+        systemPrompt:
+          "You are a helpful AI assistant for Eclipse Support Center. Be friendly, professional, and concise. Help users with their questions about the platform.",
+      },
       organizationId: demoOrg.id,
     },
   });
@@ -92,12 +95,207 @@ async function main() {
 
   console.log("Created sample context blocks");
 
+  // Create a demo chat for ticket testing
+  const demoChat = await prisma.chat.upsert({
+    where: { id: "demo-chat-1" },
+    update: {},
+    create: {
+      id: "demo-chat-1",
+      title: "Help with login issue",
+      description: "Customer having trouble logging in",
+      status: "ACTIVE",
+      escalationRequested: true,
+      escalationReason: "Technical issue requiring investigation",
+      chatbotId: demoChatbot.id,
+      assignedToId: user.id,
+    },
+  });
+
+  // Add messages to the demo chat
+  await prisma.message.create({
+    data: {
+      content: "Hi, I'm having trouble logging into my account. I keep getting an error message.",
+      role: "USER",
+      chatId: demoChat.id,
+      userId: user.id,
+    },
+  });
+
+  await prisma.message.create({
+    data: {
+      content: "I'm sorry to hear that. Can you tell me what error message you're seeing?",
+      role: "ASSISTANT",
+      chatId: demoChat.id,
+    },
+  });
+
+  await prisma.message.create({
+    data: {
+      content: "It says 'Invalid credentials' but I know my password is correct. I even tried resetting it.",
+      role: "USER",
+      chatId: demoChat.id,
+      userId: user.id,
+    },
+  });
+
+  console.log("Created demo chat with messages");
+
+  // Create sample tickets
+  const ticket1 = await prisma.ticket.create({
+    data: {
+      subject: "Cannot access billing dashboard",
+      description: "Customer reported they cannot access the billing section after the latest update. Attempted clearing cache and cookies without success.",
+      status: "IN_PROGRESS",
+      priority: "HIGH",
+      category: "Technical",
+      organizationId: demoOrg.id,
+      requesterName: "John Smith",
+      requesterEmail: "john.smith@example.com",
+      requesterId: user.id,
+      assignedToId: user.id,
+      tags: ["billing", "access-issue", "urgent"],
+      metadata: {
+        source: "manual",
+        browser: "Chrome 118",
+        os: "Windows 11",
+      },
+    },
+  });
+
+  const ticket2 = await prisma.ticket.create({
+    data: {
+      subject: "Feature request: Dark mode",
+      description: "Customer requested a dark mode option for the dashboard. Multiple users have asked for this feature.",
+      status: "NEW",
+      priority: "LOW",
+      category: "Feature Request",
+      organizationId: demoOrg.id,
+      requesterName: "Sarah Johnson",
+      requesterEmail: "sarah.j@example.com",
+      tags: ["feature-request", "ui"],
+      metadata: {
+        source: "manual",
+      },
+    },
+  });
+
+  const ticket3 = await prisma.ticket.create({
+    data: {
+      subject: "Login issue - escalated from chat",
+      description: `--- Chat Transcript ---
+
+[Nov 02, 2025 10:30] Customer: Hi, I'm having trouble logging into my account. I keep getting an error message.
+[Nov 02, 2025 10:31] Bot: I'm sorry to hear that. Can you tell me what error message you're seeing?
+[Nov 02, 2025 10:32] Customer: It says 'Invalid credentials' but I know my password is correct. I even tried resetting it.
+
+--- End of Transcript ---`,
+      status: "OPEN",
+      priority: "HIGH",
+      category: "Technical",
+      organizationId: demoOrg.id,
+      requesterName: "Test User",
+      requesterEmail: "test@example.com",
+      requesterId: user.id,
+      assignedToId: user.id,
+      tags: ["escalated-from-chat", "login", "authentication"],
+      originChatId: demoChat.id,
+      metadata: {
+        source: "chat",
+        chatId: demoChat.id,
+        escalationRequested: true,
+        escalationReason: "Technical issue requiring investigation",
+      },
+    },
+  });
+
+  console.log("Created sample tickets");
+
+  // Create responses for ticket 1
+  await prisma.ticketResponse.create({
+    data: {
+      content: "Hi John, I've looked into this issue. It appears there was a permissions error after the update. I'm working with our dev team to resolve it.",
+      isInternal: false,
+      authorId: user.id,
+      authorEmail: user.email,
+      authorName: user.name || "Support Agent",
+      authorType: "AGENT",
+      ticketId: ticket1.id,
+    },
+  });
+
+  await prisma.ticketResponse.create({
+    data: {
+      content: "Internal note: This affects all users who had custom billing roles. Need to run migration script.",
+      isInternal: true,
+      authorId: user.id,
+      authorEmail: user.email,
+      authorName: user.name || "Support Agent",
+      authorType: "AGENT",
+      ticketId: ticket1.id,
+    },
+  });
+
+  console.log("Created sample ticket responses");
+
+  // Create activities for tickets
+  await prisma.ticketActivity.create({
+    data: {
+      ticketId: ticket1.id,
+      activityType: "CREATED",
+      description: "Ticket created",
+      performedById: user.id,
+      performedByName: user.name || "System",
+    },
+  });
+
+  await prisma.ticketActivity.create({
+    data: {
+      ticketId: ticket1.id,
+      activityType: "ASSIGNED",
+      description: `Ticket assigned to ${user.name || "agent"}`,
+      performedById: user.id,
+      performedByName: user.name || "System",
+      changes: {
+        assignedToId: { from: null, to: user.id },
+      },
+    },
+  });
+
+  await prisma.ticketActivity.create({
+    data: {
+      ticketId: ticket1.id,
+      activityType: "STATUS_CHANGED",
+      description: "Status changed from NEW to IN_PROGRESS",
+      performedById: user.id,
+      performedByName: user.name || "System",
+      changes: {
+        status: { from: "NEW", to: "IN_PROGRESS" },
+      },
+    },
+  });
+
+  await prisma.ticketActivity.create({
+    data: {
+      ticketId: ticket3.id,
+      activityType: "CREATED",
+      description: "Ticket created from chat",
+      performedById: user.id,
+      performedByName: user.name || "System",
+    },
+  });
+
+  console.log("Created sample ticket activities");
+
   console.log("\n✅ Seed data created successfully!");
   console.log("\n📝 Demo Chatbot Details:");
   console.log(`   - Chatbot ID: ${demoChatbot.id}`);
   console.log(`   - Name: ${demoChatbot.name}`);
   console.log(`   - Organization: ${demoOrg.name}`);
   console.log(`   - Status: ${demoChatbot.status}`);
+  console.log(`\n🎫 Demo Tickets Created:`);
+  console.log(`   - Ticket #${ticket1.ticketNumber}: ${ticket1.subject}`);
+  console.log(`   - Ticket #${ticket2.ticketNumber}: ${ticket2.subject}`);
+  console.log(`   - Ticket #${ticket3.ticketNumber}: ${ticket3.subject} (from chat)`);
   console.log(`\n🔗 Use this in your iframe:`);
   console.log(`   /embed/chat?chatbotId=${demoChatbot.id}`);
 }

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simple Icon Mode Example</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f5f5f5;
+      padding: 40px;
+    }
+
+    .content {
+      max-width: 800px;
+      margin: 0 auto;
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    p {
+      color: #666;
+      line-height: 1.8;
+      margin-bottom: 20px;
+    }
+
+    .highlight {
+      background: #e0f2fe;
+      padding: 20px;
+      border-radius: 8px;
+      border-left: 4px solid #0284c7;
+      margin: 30px 0;
+    }
+
+    .highlight strong {
+      color: #0284c7;
+    }
+  </style>
+</head>
+<body>
+  <div class="content">
+    <h1>Minimal Icon Mode Example</h1>
+    
+    <p>
+      This is a minimal example showing how to add the Eclipse chat widget to your website
+      in Intercom-style icon mode. The widget appears as a floating icon in the bottom-right
+      corner of your screen.
+    </p>
+
+    <div class="highlight">
+      <strong>👉 Look at the bottom-right corner!</strong><br>
+      Click the blue icon to open the chat window. Notice the smooth animation as it expands.
+    </div>
+
+    <h2>How it works</h2>
+    
+    <p>
+      This page includes just two lines of code to add the chat widget:
+    </p>
+
+    <ol>
+      <li>Load the widget script</li>
+      <li>Initialize with your configuration</li>
+    </ol>
+
+    <h2>Features</h2>
+    
+    <ul>
+      <li>✓ Smooth scale and slide animations</li>
+      <li>✓ Hover effects with scale transformation</li>
+      <li>✓ Close button when chat is open</li>
+      <li>✓ Mobile-responsive design</li>
+      <li>✓ GPU-accelerated for performance</li>
+      <li>✓ Customizable colors and sizes</li>
+    </ul>
+
+    <h2>Your Site</h2>
+    
+    <p>
+      To add this to your own website, simply include the widget script and initialize it
+      with your chatbot ID. That's it! Your visitors will see the same floating icon.
+    </p>
+
+    <p>
+      <strong>Note:</strong> This example uses test data. Replace the <code>chatbotId</code>
+      with your actual chatbot ID in production.
+    </p>
+  </div>
+
+  <!-- Eclipse Chat Widget - Just these two parts! -->
+  <script src="/eclipse-chat-widget.js"></script>
+  <script>
+    // Get base URL
+    const baseURL = window.location.protocol === 'file:' 
+      ? 'http://localhost:3000' 
+      : window.location.origin;
+
+    // Initialize the widget
+    new EclipseChatWidget({
+      // Display Settings
+      mode: 'icon',                    // Intercom-style floating icon
+      position: 'bottom-right',        // Position on screen
+      
+      // Icon Settings
+      iconSize: '60px',                // Size of the floating icon
+      primaryColor: '#3b82f6',         // Brand color (blue)
+      
+      // Chat Window Settings
+      height: '600px',                 // Chat window height
+      width: '400px',                  // Chat window width
+      borderRadius: '16px',            // Rounded corners
+      
+      // Content
+      chatbotId: 'test-chatbot-id',   // Your chatbot ID here!
+      welcomeMessage: '👋 Hi! How can we help you today?',
+      placeholder: 'Type your message...'
+    }, baseURL);
+  </script>
+</body>
+</html>
+

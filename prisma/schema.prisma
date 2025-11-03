@@ -8,19 +8,24 @@ datasource db {
 }
 
 model User {
-  id                String                 @id @default(cuid())
-  name              String?
-  email             String                 @unique
-  emailVerified     DateTime?
-  image             String?
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
-  accounts          Account[]
-  messages          Message[]
-  sessions          Session[]
-  organizations     Organization[]         @relation("OrganizationMembers")
-  uploadedDocuments OrganizationDocument[]
-  assignedChats     Chat[]                 @relation("AssignedChats")
+  id                  String                 @id @default(cuid())
+  name                String?
+  email               String                 @unique
+  emailVerified       DateTime?
+  image               String?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  accounts            Account[]
+  messages            Message[]
+  sessions            Session[]
+  organizations       Organization[]         @relation("OrganizationMembers")
+  uploadedDocuments   OrganizationDocument[]
+  assignedChats       Chat[]                 @relation("AssignedChats")
+  requestedTickets    Ticket[]               @relation("TicketRequester")
+  assignedTickets     Ticket[]               @relation("TicketAssignee")
+  ticketResponses     TicketResponse[]
+  ticketActivities    TicketActivity[]
+  uploadedAttachments TicketAttachment[]
 }
 
 model Organization {
@@ -33,6 +38,7 @@ model Organization {
   chatbots    Chatbot[]
   users       User[]                 @relation("OrganizationMembers")
   documents   OrganizationDocument[]
+  tickets     Ticket[]
 
   @@index([slug])
 }
@@ -143,6 +149,7 @@ model Chat {
   chatbot               Chatbot?   @relation(fields: [chatbotId], references: [id], onDelete: Cascade)
   messages              Message[]
   assignedTo            User?      @relation("AssignedChats", fields: [assignedToId], references: [id])
+  tickets               Ticket[]
 
   @@index([chatbotId])
   @@index([status])
@@ -203,4 +210,181 @@ enum OrganizationDocumentType {
   GUIDE
   FAQ
   ANNOUNCEMENT
+}
+
+// Support Ticket Models
+
+model Ticket {
+  id           String         @id @default(cuid())
+  ticketNumber Int            @unique @default(autoincrement())
+  subject      String
+  description  String
+  status       TicketStatus   @default(NEW)
+  priority     TicketPriority @default(MEDIUM)
+  category     String?
+
+  // Relations
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  requesterId    String?
+  requester      User?   @relation("TicketRequester", fields: [requesterId], references: [id])
+  requesterEmail String
+  requesterName  String
+
+  assignedToId String?
+  assignedTo   User?     @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  assignedAt   DateTime?
+
+  // Chat Integration
+  originChatId  String?
+  originChat    Chat?    @relation(fields: [originChatId], references: [id])
+  linkedChatIds String[] @default([])
+
+  // Metadata
+  tags         String[] @default([])
+  customFields Json?
+  metadata     Json?
+
+  // SLA tracking
+  firstResponseAt  DateTime?
+  firstResponseSla DateTime?
+  resolutionSla    DateTime?
+  resolvedAt       DateTime?
+  closedAt         DateTime?
+
+  // Timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  responses   TicketResponse[]
+  attachments TicketAttachment[]
+  activities  TicketActivity[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([priority])
+  @@index([assignedToId])
+  @@index([requesterId])
+  @@index([requesterEmail])
+  @@index([createdAt])
+  @@index([ticketNumber])
+  @@index([originChatId])
+}
+
+model TicketResponse {
+  id             String  @id @default(cuid())
+  content        String
+  isInternal     Boolean @default(false)
+  isEmailSent    Boolean @default(false)
+  emailMessageId String?
+
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  authorId    String?
+  author      User?              @relation(fields: [authorId], references: [id])
+  authorEmail String
+  authorName  String
+  authorType  ResponseAuthorType @default(AGENT)
+
+  attachments TicketAttachment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ticketId])
+  @@index([authorId])
+  @@index([createdAt])
+}
+
+model TicketAttachment {
+  id           String  @id @default(cuid())
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  url          String
+  thumbnailUrl String?
+
+  ticketId String?
+  ticket   Ticket? @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  responseId String?
+  response   TicketResponse? @relation(fields: [responseId], references: [id], onDelete: Cascade)
+
+  uploadedById String?
+  uploadedBy   User?   @relation(fields: [uploadedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+  @@index([responseId])
+  @@index([uploadedById])
+}
+
+model TicketActivity {
+  id       String @id @default(cuid())
+  ticketId String
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  activityType TicketActivityType
+  description  String
+  changes      Json?
+
+  performedById   String?
+  performedBy     User?   @relation(fields: [performedById], references: [id])
+  performedByName String
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
+  @@index([createdAt])
+}
+
+// Ticket Enums
+
+enum TicketStatus {
+  NEW
+  OPEN
+  IN_PROGRESS
+  WAITING_ON_CUSTOMER
+  WAITING_ON_THIRD_PARTY
+  RESOLVED
+  CLOSED
+  CANCELLED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+  CRITICAL
+}
+
+enum ResponseAuthorType {
+  CUSTOMER
+  AGENT
+  SYSTEM
+  EMAIL
+}
+
+enum TicketActivityType {
+  CREATED
+  STATUS_CHANGED
+  PRIORITY_CHANGED
+  ASSIGNED
+  UNASSIGNED
+  RESPONDED
+  INTERNAL_NOTE_ADDED
+  ATTACHMENT_ADDED
+  TAG_ADDED
+  TAG_REMOVED
+  MERGED
+  SPLIT
+  REOPENED
+  RESOLVED
+  CLOSED
 }

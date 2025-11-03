@@ -144,10 +144,14 @@ export function EmbedChatsList({
 
       <CardContent className="flex-1 flex flex-col p-0">
         {/* New Chat Button */}
-        <div className="p-4 border-b">
-          <Button onClick={onNewChat} className="w-full" size="lg">
-            <Plus className="h-4 w-4 mr-2" />
-            Start New Chat
+        <div className="p-4 border-b fixed bottom-0 left-0 z-1000 right-0 flex justify-center items-center">
+          <Button
+            onClick={onNewChat}
+            className="w-auto max-w-[120px] mx-auto bg-black rounded-full text-white hover:bg-black/90 transition-all duration-300"
+            size="lg"
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            New Chat
           </Button>
         </div>
 

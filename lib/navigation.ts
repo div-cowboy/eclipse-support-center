@@ -17,6 +17,11 @@ export const navigationLinks: NavigationItem[] = [
     icon: "MessageSquare",
   },
   {
+    title: "Support Tickets",
+    href: "/app/tickets",
+    icon: "Ticket",
+  },
+  {
     title: "Chatbots",
     href: "/app/chatbots",
     icon: "Bot",

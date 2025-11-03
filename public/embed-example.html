@@ -187,6 +187,15 @@
       </div>
 
       <div class="control-group">
+        <label for="widgetMode">Widget Mode</label>
+        <select id="widgetMode">
+          <option value="inline">Inline (embedded in page)</option>
+          <option value="icon">Floating Icon (Intercom-style)</option>
+          <option value="popup">Floating Popup with Text</option>
+        </select>
+      </div>
+
+      <div class="control-group">
         <label for="fontFamily">Font Family</label>
         <input 
           type="text" 
@@ -221,6 +230,7 @@
     </div>
   </div>
 
+  <script src="/eclipse-chat-widget.js"></script>
   <script>
     // Get base URL (works in both dev and production)
     // For testing, if opened as file://, use localhost
@@ -231,6 +241,8 @@
     console.log('🌐 Base URL:', baseURL);
     console.log('🔗 Current origin:', window.location.origin);
 
+    let currentWidget = null;
+
     function updateIframe() {
       const chatbotId = document.getElementById('chatbotId').value;
       
@@ -239,36 +251,71 @@
         return;
       }
 
-      const config = {
-        chatbotId: chatbotId,
-        theme: document.getElementById('theme').value,
-        primaryColor: document.getElementById('primaryColor').value,
-        fontFamily: document.getElementById('fontFamily').value,
-        welcomeMessage: document.getElementById('welcomeMessage').value,
-        placeholder: document.getElementById('placeholder').value,
-        // Custom CSS for styling
-        customCSS: encodeURIComponent(`
-          .bg-primary {
-            background: linear-gradient(135deg, ${document.getElementById('primaryColor').value} 0%, ${document.getElementById('primaryColor').value}dd 100%);
-          }
-          .border-b {
-            border-color: ${document.getElementById('primaryColor').value}33 !important;
-          }
-        `)
-      };
+      const widgetMode = document.getElementById('widgetMode').value;
+      const chatWrapper = document.getElementById('chat-iframe').parentElement;
 
-      // Build URL
-      const params = new URLSearchParams();
-      Object.entries(config).forEach(([key, value]) => {
-        if (value) params.append(key, value);
-      });
+      // Destroy existing widget if any
+      if (currentWidget) {
+        currentWidget.destroy();
+        currentWidget = null;
+      }
 
-      const iframeURL = `${baseURL}/embed/chat?${params.toString()}`;
-      
-      // Update iframe
-      document.getElementById('chat-iframe').src = iframeURL;
-      
-      console.log('Updated iframe URL:', iframeURL);
+      if (widgetMode === 'inline') {
+        // Show inline iframe
+        chatWrapper.style.display = 'block';
+        
+        const config = {
+          chatbotId: chatbotId,
+          theme: document.getElementById('theme').value,
+          primaryColor: document.getElementById('primaryColor').value,
+          fontFamily: document.getElementById('fontFamily').value,
+          welcomeMessage: document.getElementById('welcomeMessage').value,
+          placeholder: document.getElementById('placeholder').value,
+          // Custom CSS for styling
+          customCSS: encodeURIComponent(`
+            .bg-primary {
+              background: linear-gradient(135deg, ${document.getElementById('primaryColor').value} 0%, ${document.getElementById('primaryColor').value}dd 100%);
+            }
+            .border-b {
+              border-color: ${document.getElementById('primaryColor').value}33 !important;
+            }
+          `)
+        };
+
+        // Build URL
+        const params = new URLSearchParams();
+        Object.entries(config).forEach(([key, value]) => {
+          if (value) params.append(key, value);
+        });
+
+        const iframeURL = `${baseURL}/embed/chat?${params.toString()}`;
+        
+        // Update iframe
+        document.getElementById('chat-iframe').src = iframeURL;
+        
+        console.log('Updated iframe URL:', iframeURL);
+      } else {
+        // Hide inline iframe and create floating widget
+        chatWrapper.style.display = 'none';
+
+        const widgetConfig = {
+          mode: widgetMode, // 'icon' or 'popup'
+          chatbotId: chatbotId,
+          theme: document.getElementById('theme').value,
+          primaryColor: document.getElementById('primaryColor').value,
+          welcomeMessage: document.getElementById('welcomeMessage').value,
+          placeholder: document.getElementById('placeholder').value,
+          position: 'bottom-right',
+          height: '600px',
+          width: '400px',
+          borderRadius: '16px',
+          iconSize: '60px',
+          buttonText: 'Chat with us'
+        };
+
+        currentWidget = new EclipseChatWidget(widgetConfig, baseURL);
+        console.log('Created floating widget in mode:', widgetMode);
+      }
     }
 
     // Auto-load if chatbot ID is in URL
