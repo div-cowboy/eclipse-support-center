@@ -10,6 +10,16 @@ import {
   CardTitle,
 } from "@/components/shadcn/ui/card";
 import { Badge } from "@/components/shadcn/ui/badge";
+import { Input } from "@/components/shadcn/ui/input";
+import { Label } from "@/components/shadcn/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/shadcn/ui/select";
+import { Checkbox } from "@/components/shadcn/ui/checkbox";
 import {
   ArrowLeft,
   Edit,
@@ -18,6 +28,8 @@ import {
   MessageSquare,
   FileText,
   MessageCircle,
+  Copy,
+  Check,
 } from "lucide-react";
 import {
   ContextBlockList,
@@ -33,6 +45,7 @@ interface Chatbot {
   description?: string;
   status: "ACTIVE" | "INACTIVE" | "ARCHIVED";
   config?: ChatbotConfig;
+  organizationId: string;
   createdAt: Date;
   updatedAt: Date;
   contextBlocks: ContextBlock[];
@@ -50,6 +63,25 @@ export default function ChatbotDetailPage() {
   const [showContextForm, setShowContextForm] = useState(false);
   const [editingContextBlock, setEditingContextBlock] =
     useState<ContextBlock | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [embedConfig, setEmbedConfig] = useState({
+    embedType: "iframe" as "iframe" | "icon" | "popup",
+    theme: "auto" as "light" | "dark" | "auto",
+    primaryColor: "#3b82f6",
+    borderRadius: "8px",
+    width: "400",
+    height: "600",
+    showBranding: true,
+    welcomeMessage: "",
+    placeholder: "Type your message...",
+    fontFamily: "",
+    fontSize: "",
+    // Widget-specific options
+    iconSize: "60",
+    position: "bottom-right" as "bottom-right" | "bottom-left" | "top-right" | "top-left" | "center",
+    buttonText: "Chat with us",
+    autoOpen: false,
+  });
 
   useEffect(() => {
     // Fetch chatbot data
@@ -184,6 +216,183 @@ export default function ChatbotDetailPage() {
     setShowContextForm(true);
   };
 
+  const getBaseUrl = () => {
+    // Use environment variable if set, otherwise fall back to window.location.origin
+    if (typeof window !== "undefined") {
+      const envBaseUrl = process.env.NEXT_PUBLIC_EMBED_BASE_URL || process.env.NEXT_PUBLIC_BASE_URL;
+      if (envBaseUrl) {
+        // Ensure it doesn't have a trailing slash
+        return envBaseUrl.replace(/\/$/, "");
+      }
+      return window.location.origin;
+    }
+    return "";
+  };
+
+  const getEmbedUrl = () => {
+    if (!chatbot) return "";
+    
+    const baseUrl = getBaseUrl();
+    const params = new URLSearchParams({
+      chatbotId: chatbot.id,
+    });
+    
+    if (chatbot.organizationId) {
+      params.append("organizationId", chatbot.organizationId);
+    }
+
+    // Add configurable parameters
+    if (embedConfig.theme && embedConfig.theme !== "auto") {
+      params.append("theme", embedConfig.theme);
+    }
+    if (embedConfig.primaryColor) {
+      // URL encode the # symbol - URLSearchParams doesn't encode # automatically
+      const encodedColor = embedConfig.primaryColor.startsWith("#") 
+        ? "%23" + embedConfig.primaryColor.slice(1)
+        : embedConfig.primaryColor;
+      params.append("primaryColor", encodedColor);
+    }
+    if (embedConfig.borderRadius) {
+      params.append("borderRadius", embedConfig.borderRadius);
+    }
+    if (embedConfig.width) {
+      const widthValue = embedConfig.width + (embedConfig.width.includes("px") || embedConfig.width.includes("%") || embedConfig.width.includes("vw") || embedConfig.width.includes("vh") ? "" : "px");
+      params.append("width", widthValue);
+    }
+    if (embedConfig.height) {
+      const heightValue = embedConfig.height + (embedConfig.height.includes("px") || embedConfig.height.includes("%") || embedConfig.height.includes("vw") || embedConfig.height.includes("vh") ? "" : "px");
+      params.append("height", heightValue);
+    }
+    if (!embedConfig.showBranding) {
+      params.append("showBranding", "false");
+    }
+    if (embedConfig.welcomeMessage) {
+      params.append("welcomeMessage", embedConfig.welcomeMessage);
+    }
+    if (embedConfig.placeholder) {
+      params.append("placeholder", embedConfig.placeholder);
+    }
+    if (embedConfig.fontFamily) {
+      params.append("fontFamily", embedConfig.fontFamily);
+    }
+    if (embedConfig.fontSize) {
+      params.append("fontSize", embedConfig.fontSize);
+    }
+
+    return `${baseUrl}/embed/chat?${params.toString()}`;
+  };
+
+  const getEmbedCode = () => {
+    if (!chatbot) return "";
+    
+    const baseUrl = getBaseUrl();
+    
+    if (embedConfig.embedType === "iframe") {
+      const embedUrl = getEmbedUrl();
+      const widthValue = embedConfig.width + (embedConfig.width.includes("px") || embedConfig.width.includes("%") || embedConfig.width.includes("vw") || embedConfig.width.includes("vh") ? "" : "px");
+      const heightValue = embedConfig.height + (embedConfig.height.includes("px") || embedConfig.height.includes("%") || embedConfig.height.includes("vw") || embedConfig.height.includes("vh") ? "" : "px");
+      const borderRadiusValue = embedConfig.borderRadius;
+      
+      return `<iframe
+  src="${embedUrl}"
+  width="${widthValue}"
+  height="${heightValue}"
+  frameborder="0"
+  style="border-radius: ${borderRadiusValue}; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"
+></iframe>`;
+    } else {
+      // Widget mode (icon or popup)
+      const config: string[] = [];
+      config.push(`  mode: '${embedConfig.embedType}',`);
+      config.push(`  chatbotId: '${chatbot.id}',`);
+      
+      if (chatbot.organizationId) {
+        config.push(`  organizationId: '${chatbot.organizationId}',`);
+      }
+      if (embedConfig.theme && embedConfig.theme !== "auto") {
+        config.push(`  theme: '${embedConfig.theme}',`);
+      }
+      if (embedConfig.primaryColor) {
+        config.push(`  primaryColor: '${embedConfig.primaryColor}',`);
+      }
+      if (embedConfig.borderRadius) {
+        config.push(`  borderRadius: '${embedConfig.borderRadius}',`);
+      }
+      if (embedConfig.width) {
+        const widthValue = embedConfig.width + (embedConfig.width.includes("px") || embedConfig.width.includes("%") || embedConfig.width.includes("vw") || embedConfig.width.includes("vh") ? "" : "px");
+        config.push(`  width: '${widthValue}',`);
+      }
+      if (embedConfig.height) {
+        const heightValue = embedConfig.height + (embedConfig.height.includes("px") || embedConfig.height.includes("%") || embedConfig.height.includes("vw") || embedConfig.height.includes("vh") ? "" : "px");
+        config.push(`  height: '${heightValue}',`);
+      }
+      if (embedConfig.welcomeMessage) {
+        config.push(`  welcomeMessage: '${embedConfig.welcomeMessage.replace(/'/g, "\\'")}',`);
+      }
+      if (embedConfig.placeholder) {
+        config.push(`  placeholder: '${embedConfig.placeholder.replace(/'/g, "\\'")}',`);
+      }
+      
+      if (embedConfig.embedType === "icon") {
+        if (embedConfig.iconSize) {
+          const iconSizeValue = embedConfig.iconSize + (embedConfig.iconSize.includes("px") ? "" : "px");
+          config.push(`  iconSize: '${iconSizeValue}',`);
+        }
+      }
+      
+      if (embedConfig.position !== "bottom-right") {
+        config.push(`  position: '${embedConfig.position}',`);
+      }
+      
+      if (embedConfig.embedType === "popup" && embedConfig.buttonText) {
+        config.push(`  buttonText: '${embedConfig.buttonText.replace(/'/g, "\\'")}',`);
+      }
+      
+      if (embedConfig.autoOpen) {
+        config.push(`  autoOpen: true,`);
+      }
+      
+      // Join config and remove trailing comma from last item
+      let configStr = config.join("\n");
+      // Remove trailing comma from the last line
+      configStr = configStr.replace(/,\s*$/, "");
+      
+      return `<script src="${baseUrl}/eclipse-chat-widget.js"></script>
+<script>
+  new EclipseChatWidget({
+${configStr}
+  });
+</script>`;
+    }
+  };
+
+  const handleCopyEmbedCode = async () => {
+    const embedCode = getEmbedCode();
+    try {
+      await navigator.clipboard.writeText(embedCode);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (error) {
+      console.error("Failed to copy:", error);
+      // Fallback for older browsers
+      const textArea = document.createElement("textarea");
+      textArea.value = embedCode;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      try {
+        document.execCommand("copy");
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      } catch (err) {
+        console.error("Fallback copy failed:", err);
+      } finally {
+        document.body.removeChild(textArea);
+      }
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -308,6 +517,337 @@ export default function ChatbotDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle>Embed Code</CardTitle>
+            <Button
+              onClick={handleCopyEmbedCode}
+              variant="outline"
+              size="sm"
+              className="gap-2"
+            >
+              {copied ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Copied!
+                </>
+              ) : (
+                <>
+                  <Copy className="h-4 w-4" />
+                  Copy Code
+                </>
+              )}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div>
+            <p className="text-sm text-muted-foreground mb-4">
+              Configure the embed options below. The embed code will update automatically based on your selection.
+            </p>
+          </div>
+
+          {/* Configuration Controls */}
+          <div className="space-y-2">
+            <Label htmlFor="embedType">Embed Type</Label>
+            <Select
+              value={embedConfig.embedType}
+              onValueChange={(value: "iframe" | "icon" | "popup") =>
+                setEmbedConfig((prev) => ({ ...prev, embedType: value }))
+              }
+            >
+              <SelectTrigger id="embedType">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="iframe">Inline iframe</SelectItem>
+                <SelectItem value="icon">Icon Mode (Floating Icon)</SelectItem>
+                <SelectItem value="popup">Popup Mode (Floating Button)</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              {embedConfig.embedType === "iframe" && "Direct iframe embed - best for embedding in a specific location"}
+              {embedConfig.embedType === "icon" && "Floating icon button (Intercom-style) - expands to full chat window"}
+              {embedConfig.embedType === "popup" && "Floating button with text - expands to full chat window"}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="theme">Theme</Label>
+              <Select
+                value={embedConfig.theme}
+                onValueChange={(value: "light" | "dark" | "auto") =>
+                  setEmbedConfig((prev) => ({ ...prev, theme: value }))
+                }
+              >
+                <SelectTrigger id="theme">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">Auto</SelectItem>
+                  <SelectItem value="light">Light</SelectItem>
+                  <SelectItem value="dark">Dark</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="primaryColor">Primary Color</Label>
+              <div className="flex gap-2">
+                <Input
+                  id="primaryColor"
+                  type="color"
+                  value={embedConfig.primaryColor}
+                  onChange={(e) =>
+                    setEmbedConfig((prev) => ({ ...prev, primaryColor: e.target.value }))
+                  }
+                  className="w-16 h-10 p-1"
+                />
+                <Input
+                  type="text"
+                  value={embedConfig.primaryColor}
+                  onChange={(e) =>
+                    setEmbedConfig((prev) => ({ ...prev, primaryColor: e.target.value }))
+                  }
+                  placeholder="#3b82f6"
+                  className="flex-1"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="borderRadius">Border Radius</Label>
+              <Input
+                id="borderRadius"
+                value={embedConfig.borderRadius}
+                onChange={(e) =>
+                  setEmbedConfig((prev) => ({ ...prev, borderRadius: e.target.value }))
+                }
+                placeholder="8px"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="width">Width</Label>
+              <Input
+                id="width"
+                value={embedConfig.width}
+                onChange={(e) =>
+                  setEmbedConfig((prev) => ({ ...prev, width: e.target.value }))
+                }
+                placeholder="400px or 100%"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="height">Height</Label>
+              <Input
+                id="height"
+                value={embedConfig.height}
+                onChange={(e) =>
+                  setEmbedConfig((prev) => ({ ...prev, height: e.target.value }))
+                }
+                placeholder="600px or 100vh"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="welcomeMessage">Welcome Message</Label>
+              <Input
+                id="welcomeMessage"
+                value={embedConfig.welcomeMessage}
+                onChange={(e) =>
+                  setEmbedConfig((prev) => ({ ...prev, welcomeMessage: e.target.value }))
+                }
+                placeholder="Hello! How can I help you today?"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="placeholder">Input Placeholder</Label>
+              <Input
+                id="placeholder"
+                value={embedConfig.placeholder}
+                onChange={(e) =>
+                  setEmbedConfig((prev) => ({ ...prev, placeholder: e.target.value }))
+                }
+                placeholder="Type your message..."
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="fontFamily">Font Family</Label>
+              <Input
+                id="fontFamily"
+                value={embedConfig.fontFamily}
+                onChange={(e) =>
+                  setEmbedConfig((prev) => ({ ...prev, fontFamily: e.target.value }))
+                }
+                placeholder="Inter, Arial, sans-serif"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="fontSize">Font Size</Label>
+              <Input
+                id="fontSize"
+                value={embedConfig.fontSize}
+                onChange={(e) =>
+                  setEmbedConfig((prev) => ({ ...prev, fontSize: e.target.value }))
+                }
+                placeholder="16px"
+              />
+            </div>
+
+            {/* Widget-specific options */}
+            {embedConfig.embedType === "icon" && (
+              <div className="space-y-2">
+                <Label htmlFor="iconSize">Icon Size</Label>
+                <Input
+                  id="iconSize"
+                  value={embedConfig.iconSize}
+                  onChange={(e) =>
+                    setEmbedConfig((prev) => ({ ...prev, iconSize: e.target.value }))
+                  }
+                  placeholder="60px"
+                />
+              </div>
+            )}
+
+            {embedConfig.embedType === "popup" && (
+              <div className="space-y-2">
+                <Label htmlFor="buttonText">Button Text</Label>
+                <Input
+                  id="buttonText"
+                  value={embedConfig.buttonText}
+                  onChange={(e) =>
+                    setEmbedConfig((prev) => ({ ...prev, buttonText: e.target.value }))
+                  }
+                  placeholder="Chat with us"
+                />
+              </div>
+            )}
+
+            {(embedConfig.embedType === "icon" || embedConfig.embedType === "popup") && (
+              <div className="space-y-2">
+                <Label htmlFor="position">Position</Label>
+                <Select
+                  value={embedConfig.position}
+                  onValueChange={(value: "bottom-right" | "bottom-left" | "top-right" | "top-left" | "center") =>
+                    setEmbedConfig((prev) => ({ ...prev, position: value }))
+                  }
+                >
+                  <SelectTrigger id="position">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="bottom-right">Bottom Right</SelectItem>
+                    <SelectItem value="bottom-left">Bottom Left</SelectItem>
+                    <SelectItem value="top-right">Top Right</SelectItem>
+                    <SelectItem value="top-left">Top Left</SelectItem>
+                    <SelectItem value="center">Center</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="showBranding"
+              checked={embedConfig.showBranding}
+              onCheckedChange={(checked) =>
+                setEmbedConfig((prev) => ({ ...prev, showBranding: checked === true }))
+              }
+            />
+            <Label
+              htmlFor="showBranding"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+            >
+              Show organization branding
+            </Label>
+          </div>
+
+          {(embedConfig.embedType === "icon" || embedConfig.embedType === "popup") && (
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="autoOpen"
+                checked={embedConfig.autoOpen}
+                onCheckedChange={(checked) =>
+                  setEmbedConfig((prev) => ({ ...prev, autoOpen: checked === true }))
+                }
+              />
+              <Label
+                htmlFor="autoOpen"
+                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+              >
+                Automatically open chat on page load
+              </Label>
+            </div>
+          )}
+
+          {/* Live Preview */}
+          {embedConfig.embedType === "iframe" && (
+            <div className="space-y-2">
+              <Label>Live Preview</Label>
+              <div className="bg-muted p-4 rounded-lg flex justify-center items-center">
+                <div
+                  style={{
+                    width: embedConfig.width.includes("%") || embedConfig.width.includes("vw") || embedConfig.width.includes("vh") 
+                      ? "100%" 
+                      : embedConfig.width + (embedConfig.width.includes("px") ? "" : "px"),
+                    height: embedConfig.height.includes("%") || embedConfig.height.includes("vh") 
+                      ? "600px" 
+                      : embedConfig.height + (embedConfig.height.includes("px") ? "" : "px"),
+                    maxWidth: "100%",
+                    borderRadius: embedConfig.borderRadius,
+                    overflow: "hidden",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                  }}
+                >
+                  <iframe
+                    src={getEmbedUrl()}
+                    width="100%"
+                    height="100%"
+                    frameBorder="0"
+                    style={{
+                      border: "none",
+                      display: "block",
+                    }}
+                    title="Chat widget preview"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {(embedConfig.embedType === "icon" || embedConfig.embedType === "popup") && (
+            <div className="space-y-2">
+              <Label>Preview Note</Label>
+              <div className="bg-muted p-4 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  Widget modes (icon/popup) create a floating button that appears on your website. 
+                  The preview will be available when you embed the code on your site. 
+                  Copy the code below and include it in your HTML to see the widget in action.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Embed Code Preview */}
+          <div className="space-y-2">
+            <Label>Embed Code</Label>
+            <div className="bg-muted p-4 rounded-lg relative">
+              <pre className="text-xs overflow-x-auto whitespace-pre-wrap break-words">
+                <code>{getEmbedCode()}</code>
+              </pre>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Card>

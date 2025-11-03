@@ -369,6 +369,7 @@ function EmbedChatContent() {
             chatbotId={config.chatbotId || ""}
             onSelectChat={handleSelectChat}
             onNewChat={handleNewChat}
+            onClose={handleClose}
             chatbotInfo={
               chatbotInfo && chatbotInfo.name
                 ? {

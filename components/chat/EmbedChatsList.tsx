@@ -17,6 +17,7 @@ interface EmbedChatsListProps {
   chatbotId: string;
   onSelectChat: (chatId: string) => void;
   onNewChat: () => void;
+  onClose?: () => void;
   chatbotInfo?: {
     name: string;
     description?: string;
@@ -27,6 +28,7 @@ export function EmbedChatsList({
   chatbotId,
   onSelectChat,
   onNewChat,
+  onClose,
 }: EmbedChatsListProps) {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -181,7 +183,7 @@ export function EmbedChatsList({
             <Button
               variant="ghost"
               size="sm"
-              // onClick={onClose}
+              onClick={onClose}
               className="h-8 w-8 p-0 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-all"
             >
               <X className="h-4 w-4 text-gray-600 dark:text-gray-400" />

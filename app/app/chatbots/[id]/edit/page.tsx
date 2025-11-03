@@ -26,6 +26,8 @@ interface Chatbot {
     includeOrganizationDocs?: boolean;
     includeContextBlocks?: boolean;
     coreRules?: Record<string, unknown>;
+    chatStartType?: "AI_ASSISTANT" | "HUMAN" | "CATEGORY_SELECT";
+    requireNameAndEmail?: boolean;
   };
   organizationId: string;
 }
@@ -79,6 +81,8 @@ export default function EditChatbotPage() {
       includeOrganizationDocs?: boolean;
       includeContextBlocks?: boolean;
       coreRules?: Record<string, unknown>;
+      chatStartType?: "AI_ASSISTANT" | "HUMAN" | "CATEGORY_SELECT";
+      requireNameAndEmail?: boolean;
     };
   }) => {
     setSubmitting(true);

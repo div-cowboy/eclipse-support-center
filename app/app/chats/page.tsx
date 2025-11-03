@@ -1,7 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import * as React from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
+import {
+  ColumnDef,
+  flexRender,
+  getCoreRowModel,
+  getPaginationRowModel,
+  getSortedRowModel,
+  SortingState,
+  useReactTable,
+  RowSelectionState,
+} from "@tanstack/react-table";
 import { Button } from "@/components/shadcn/ui/button";
 import { Badge } from "@/components/shadcn/ui/badge";
 import {
@@ -12,7 +23,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/shadcn/ui/table";
-import { Card, CardContent } from "@/components/shadcn/ui/card";
+import { Checkbox } from "@/components/shadcn/ui/checkbox";
 import {
   MessageSquare,
   Plus,
@@ -25,6 +36,7 @@ import {
   Building2,
   PhoneCall,
   UserCheck,
+  ArrowUpDown,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -67,11 +79,64 @@ interface TraditionalChat {
 
 export default function ChatsPage() {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [chats, setChats] = useState<TraditionalChat[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | "needs_response" | "my_chats">(
     "all"
   );
+  const [sorting, setSorting] = useState<SortingState>([]);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  // Get initial page from URL
+  const getPageFromUrl = useCallback(() => {
+    const pageParam = searchParams.get("page");
+    if (pageParam) {
+      const page = parseInt(pageParam, 10);
+      return isNaN(page) || page < 1 ? 0 : page - 1; // Convert to 0-based index
+    }
+    return 0;
+  }, [searchParams]);
+
+  // Initialize pagination from URL
+  const [initialPageIndex, setInitialPageIndex] = useState(() =>
+    getPageFromUrl()
+  );
+
+  // Update URL when page changes
+  const updateUrlWithPage = useCallback(
+    (pageIndex: number) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (pageIndex === 0) {
+        params.delete("page");
+      } else {
+        params.set("page", (pageIndex + 1).toString()); // Convert to 1-based for URL
+      }
+      const newUrl = params.toString()
+        ? `${pathname}?${params.toString()}`
+        : pathname;
+      router.replace(newUrl, { scroll: false });
+    },
+    [router, pathname, searchParams]
+  );
+
+  // Update pagination when URL changes (e.g., browser back/forward)
+  useEffect(() => {
+    const pageFromUrl = getPageFromUrl();
+    setInitialPageIndex(pageFromUrl);
+  }, [searchParams, getPageFromUrl]);
+
+  // Reset to page 0 when filter changes (to avoid being on a non-existent page)
+  const prevFilterRef = React.useRef(filter);
+  useEffect(() => {
+    if (prevFilterRef.current !== filter) {
+      // Reset to page 0 when filter changes (not on initial load)
+      setInitialPageIndex(0);
+      updateUrlWithPage(0);
+    }
+    prevFilterRef.current = filter;
+  }, [filter, updateUrlWithPage]);
 
   useEffect(() => {
     const fetchChats = async () => {
@@ -92,31 +157,6 @@ export default function ChatsPage() {
 
     fetchChats();
   }, []);
-
-  // Filter and sort chats
-  const filteredChats = chats
-    .filter((chat) => {
-      if (filter === "needs_response") {
-        return chat.escalationRequested && !chat.assignedToId;
-      }
-      if (filter === "my_chats") {
-        // Note: You'd need to compare with current user's ID
-        // For now, just show assigned chats
-        return !!chat.assignedToId;
-      }
-      return true; // "all"
-    })
-    .sort((a, b) => {
-      // Sort unassigned escalated chats to the top
-      const aUrgent = a.escalationRequested && !a.assignedToId;
-      const bUrgent = b.escalationRequested && !b.assignedToId;
-
-      if (aUrgent && !bUrgent) return -1;
-      if (!aUrgent && bUrgent) return 1;
-
-      // Then sort by most recent
-      return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
-    });
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -145,7 +185,6 @@ export default function ChatsPage() {
   };
 
   const formatDate = (date: Date) => {
-    // Use ISO format to avoid hydration mismatches between server and client
     const d = new Date(date);
     const month = d.toLocaleString("en-US", { month: "short" });
     const day = d.getDate();
@@ -169,15 +208,339 @@ export default function ChatsPage() {
     return `${minutes}m`;
   };
 
-  const handleViewChat = (chatId: string) => {
-    // For now, we'll open in a new tab. Later we can implement a modal or side panel
+  const handleViewChat = useCallback((chatId: string) => {
     window.open(`/app/chats/${chatId}`, "_blank");
-  };
+  }, []);
 
-  const handleCreateNewChat = () => {
-    // Navigate to a new chat creation page or open a modal
+  const handleCreateNewChat = useCallback(() => {
     router.push("/app/chats/new");
-  };
+  }, [router]);
+
+  // Memoize columns to prevent unnecessary re-renders
+  const columns: ColumnDef<TraditionalChat>[] = useMemo(
+    () => [
+      {
+        id: "select",
+        header: ({ table }) => (
+          <Checkbox
+            checked={
+              table.getIsAllPageRowsSelected() ||
+              (table.getIsSomePageRowsSelected() && "indeterminate")
+            }
+            onCheckedChange={(value) =>
+              table.toggleAllPageRowsSelected(!!value)
+            }
+            aria-label="Select all"
+          />
+        ),
+        cell: ({ row }) => (
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+            onClick={(e) => e.stopPropagation()}
+          />
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      },
+      {
+        accessorKey: "status",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="h-8 px-2"
+            >
+              Status
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => {
+          const chat = row.original;
+          return (
+            <div className="flex items-center gap-2">
+              {getStatusIcon(chat.status)}
+              <Badge
+                variant="outline"
+                className={`text-xs ${getStatusColor(chat.status)}`}
+              >
+                {chat.status}
+              </Badge>
+            </div>
+          );
+        },
+      },
+      {
+        accessorKey: "title",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="h-8 px-2"
+            >
+              Title
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => {
+          const chat = row.original;
+          return (
+            <div>
+              <div className="font-medium">{chat.title}</div>
+              {chat.chatbot && (
+                <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                  <Bot className="h-3 w-3" />
+                  {chat.chatbot.name}
+                </div>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: "organization",
+        header: "Organization",
+        cell: ({ row }) => {
+          const chat = row.original;
+          return chat.chatbot?.organization ? (
+            <Badge variant="secondary" className="text-xs">
+              <Building2 className="h-3 w-3 mr-1" />
+              {chat.chatbot.organization.name}
+            </Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">-</span>
+          );
+        },
+      },
+      {
+        id: "escalation",
+        header: "Escalation",
+        cell: ({ row }) => {
+          const chat = row.original;
+          const isUrgent = chat.escalationRequested && !chat.assignedToId;
+          return chat.escalationRequested ? (
+            <div className="flex flex-col gap-1">
+              <Badge
+                variant="outline"
+                className={`text-xs ${
+                  isUrgent
+                    ? "bg-amber-100 text-amber-800 border-amber-400 font-semibold dark:bg-amber-900 dark:text-amber-200 dark:border-amber-600"
+                    : "bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
+                }`}
+              >
+                <PhoneCall className="h-3 w-3 mr-1" />
+                {isUrgent ? "🚨 Urgent" : "Escalated"}
+              </Badge>
+              {chat.escalationRequestedAt && (
+                <span className="text-xs text-muted-foreground">
+                  {getTimeSince(chat.escalationRequestedAt)} ago
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-xs text-muted-foreground">-</span>
+          );
+        },
+      },
+      {
+        id: "assignedTo",
+        header: "Assigned To",
+        cell: ({ row }) => {
+          const chat = row.original;
+          return chat.assignedTo ? (
+            <Badge
+              variant="outline"
+              className="text-xs bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
+            >
+              <UserCheck className="h-3 w-3 mr-1" />
+              {chat.assignedTo.name || chat.assignedTo.email}
+            </Badge>
+          ) : (
+            <span className="text-xs text-muted-foreground">Unassigned</span>
+          );
+        },
+      },
+      {
+        accessorKey: "_count.messages",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="h-8 px-2"
+            >
+              Messages
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => {
+          const chat = row.original;
+          return (
+            <Badge variant="secondary" className="text-xs">
+              {chat._count?.messages || 0} messages
+            </Badge>
+          );
+        },
+      },
+      {
+        accessorKey: "createdAt",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="h-8 px-2"
+            >
+              Created
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => {
+          const chat = row.original;
+          return (
+            <span
+              className="text-sm text-muted-foreground"
+              suppressHydrationWarning
+            >
+              {formatDate(chat.createdAt)}
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: "updatedAt",
+        header: ({ column }) => {
+          return (
+            <Button
+              variant="ghost"
+              onClick={() =>
+                column.toggleSorting(column.getIsSorted() === "asc")
+              }
+              className="h-8 px-2"
+            >
+              Last Updated
+              <ArrowUpDown className="ml-2 h-4 w-4" />
+            </Button>
+          );
+        },
+        cell: ({ row }) => {
+          const chat = row.original;
+          return (
+            <span
+              className="text-sm text-muted-foreground"
+              suppressHydrationWarning
+            >
+              {formatDate(chat.updatedAt)}
+            </span>
+          );
+        },
+      },
+      {
+        id: "actions",
+        header: () => <div className="text-right">Actions</div>,
+        cell: ({ row }) => {
+          const chat = row.original;
+          return (
+            <div className="text-right" onClick={(e) => e.stopPropagation()}>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" className="h-8 w-8 p-0">
+                    <span className="sr-only">Open menu</span>
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={() => handleViewChat(chat.id)}>
+                    <Eye className="h-4 w-4 mr-2" />
+                    View Chat
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>Archive</DropdownMenuItem>
+                  <DropdownMenuItem className="text-red-600">
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          );
+        },
+        enableSorting: false,
+      },
+    ],
+    [handleViewChat]
+  );
+
+  // Memoize filtered chats to prevent unnecessary recalculations
+  const memoizedFilteredChats = useMemo(() => {
+    return chats.filter((chat) => {
+      if (filter === "needs_response") {
+        return chat.escalationRequested && !chat.assignedToId;
+      }
+      if (filter === "my_chats") {
+        return !!chat.assignedToId;
+      }
+      return true; // "all"
+    });
+  }, [chats, filter]);
+
+  // Handle pagination changes
+  const handlePaginationChange = useCallback(
+    (updater: (old: number) => number) => {
+      const newPageIndex = updater(initialPageIndex);
+      setInitialPageIndex(newPageIndex);
+      updateUrlWithPage(newPageIndex);
+    },
+    [initialPageIndex, updateUrlWithPage]
+  );
+
+  // Set up table
+  const table = useReactTable({
+    data: memoizedFilteredChats,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    onSortingChange: setSorting,
+    onRowSelectionChange: setRowSelection,
+    state: {
+      sorting,
+      rowSelection,
+      pagination: {
+        pageIndex: initialPageIndex,
+        pageSize: 10,
+      },
+    },
+    initialState: {
+      pagination: {
+        pageSize: 10,
+      },
+    },
+    manualPagination: false,
+  });
+
+  // Sync table when URL changes (browser back/forward)
+  useEffect(() => {
+    const currentPageIndex = table.getState().pagination.pageIndex;
+    if (currentPageIndex !== initialPageIndex) {
+      table.setPageIndex(initialPageIndex);
+    }
+  }, [initialPageIndex, table]);
 
   if (loading) {
     return (
@@ -191,6 +554,9 @@ export default function ChatsPage() {
   const needsResponseCount = chats.filter(
     (chat) => chat.escalationRequested && !chat.assignedToId
   ).length;
+
+  const selectedRows = table.getFilteredSelectedRowModel().rows;
+  const selectedCount = selectedRows.length;
 
   return (
     <div className="space-y-6">
@@ -251,18 +617,26 @@ export default function ChatsPage() {
         </Button>
       </div>
 
-      <Card>
-        {/* <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5" />
-            All Chats
-          </CardTitle>
-          <CardDescription>
-            A comprehensive view of all customer support conversations.
-          </CardDescription>
-        </CardHeader> */}
-        <CardContent className="pt-6">
-          {filteredChats.length === 0 ? (
+      {/* Selected rows actions */}
+      {selectedCount > 0 && (
+        <div className="flex items-center gap-2 rounded-md border bg-muted p-3">
+          <span className="text-sm font-medium">
+            {selectedCount} chat{selectedCount > 1 ? "s" : ""} selected
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" size="sm">
+              Archive Selected
+            </Button>
+            <Button variant="outline" size="sm" className="text-red-600">
+              Delete Selected
+            </Button>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div>
+          {memoizedFilteredChats.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12">
               <div className="rounded-full bg-muted p-6 mb-4">
                 <MessageSquare className="h-12 w-12 text-muted-foreground" />
@@ -279,166 +653,167 @@ export default function ChatsPage() {
               </Button>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead>Organization</TableHead>
-                  <TableHead>Escalation</TableHead>
-                  <TableHead>Assigned To</TableHead>
-                  <TableHead>Messages</TableHead>
-                  <TableHead>Created</TableHead>
-                  <TableHead>Last Updated</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredChats.map((chat) => {
-                  const isUrgent =
-                    chat.escalationRequested && !chat.assignedToId;
-                  return (
-                    <TableRow
-                      key={chat.id}
-                      className={`cursor-pointer hover:bg-muted/50 ${
-                        isUrgent
-                          ? "bg-amber-50 dark:bg-amber-950/20 border-l-4 border-amber-500"
-                          : ""
-                      }`}
-                      onClick={() => handleViewChat(chat.id)}
-                    >
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          {getStatusIcon(chat.status)}
-                          <Badge
-                            variant="outline"
-                            className={`text-xs ${getStatusColor(chat.status)}`}
+            <>
+              <div className="overflow-hidden rounded-md border">
+                <Table>
+                  <TableHeader>
+                    {table.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => {
+                          return (
+                            <TableHead key={header.id}>
+                              {header.isPlaceholder
+                                ? null
+                                : flexRender(
+                                    header.column.columnDef.header,
+                                    header.getContext()
+                                  )}
+                            </TableHead>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {table.getRowModel().rows?.length ? (
+                      table.getRowModel().rows.map((row) => {
+                        const chat = row.original;
+                        const isUrgent =
+                          chat.escalationRequested && !chat.assignedToId;
+                        return (
+                          <TableRow
+                            key={row.id}
+                            data-state={row.getIsSelected() && "selected"}
+                            className={`cursor-pointer hover:bg-muted/50 ${
+                              isUrgent
+                                ? "bg-amber-50 dark:bg-amber-950/20 border-l-4 border-amber-500"
+                                : ""
+                            }`}
+                            onClick={() => handleViewChat(chat.id)}
                           >
-                            {chat.status}
-                          </Badge>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div>
-                          <div className="font-medium">{chat.title}</div>
-                          {/* {chat.description && (
-                          <div className="text-sm text-muted-foreground truncate max-w-xs">
-                            {chat.description}
-                          </div>
-                        )} */}
-                          {chat.chatbot && (
-                            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                              <Bot className="h-3 w-3" />
-                              {chat.chatbot.name}
-                            </div>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {chat.chatbot?.organization ? (
-                          <Badge variant="secondary" className="text-xs">
-                            <Building2 className="h-3 w-3 mr-1" />
-                            {chat.chatbot.organization.name}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            -
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {chat.escalationRequested ? (
-                          <div className="flex flex-col gap-1">
-                            <Badge
-                              variant="outline"
-                              className={`text-xs ${
-                                isUrgent
-                                  ? "bg-amber-100 text-amber-800 border-amber-400 font-semibold dark:bg-amber-900 dark:text-amber-200 dark:border-amber-600"
-                                  : "bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
-                              }`}
-                            >
-                              <PhoneCall className="h-3 w-3 mr-1" />
-                              {isUrgent ? "🚨 Urgent" : "Escalated"}
-                            </Badge>
-                            {chat.escalationRequestedAt && (
-                              <span className="text-xs text-muted-foreground">
-                                {getTimeSince(chat.escalationRequestedAt)} ago
+                            {row.getVisibleCells().map((cell) => (
+                              <TableCell key={cell.id}>
+                                {flexRender(
+                                  cell.column.columnDef.cell,
+                                  cell.getContext()
+                                )}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        );
+                      })
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={columns.length}
+                          className="h-24 text-center"
+                        >
+                          No results.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Pagination */}
+              <div className="flex items-center justify-between py-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing{" "}
+                  {table.getState().pagination.pageIndex *
+                    table.getState().pagination.pageSize +
+                    1}{" "}
+                  to{" "}
+                  {Math.min(
+                    (table.getState().pagination.pageIndex + 1) *
+                      table.getState().pagination.pageSize,
+                    memoizedFilteredChats.length
+                  )}{" "}
+                  of {memoizedFilteredChats.length} chats
+                  {selectedCount > 0 && ` (${selectedCount} selected)`}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const newIndex = Math.max(0, initialPageIndex - 1);
+                      handlePaginationChange(() => newIndex);
+                      table.setPageIndex(newIndex);
+                    }}
+                    disabled={!table.getCanPreviousPage()}
+                  >
+                    Previous
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from(
+                      { length: table.getPageCount() },
+                      (_, i) => i + 1
+                    )
+                      .filter((page) => {
+                        const currentPage =
+                          table.getState().pagination.pageIndex + 1;
+                        const totalPages = table.getPageCount();
+                        // Show first page, last page, current page, and pages around current
+                        if (totalPages <= 7) return true;
+                        return (
+                          page === 1 ||
+                          page === totalPages ||
+                          (page >= currentPage - 1 && page <= currentPage + 1)
+                        );
+                      })
+                      .map((page, idx, arr) => {
+                        const currentPage =
+                          table.getState().pagination.pageIndex + 1;
+                        const showEllipsis =
+                          idx > 0 && arr[idx - 1] !== page - 1;
+
+                        return (
+                          <React.Fragment key={page}>
+                            {showEllipsis && (
+                              <span className="flex h-9 w-9 items-center justify-center text-muted-foreground">
+                                ...
                               </span>
                             )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            -
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {chat.assignedTo ? (
-                          <Badge
-                            variant="outline"
-                            className="text-xs bg-green-50 text-green-700 border-green-300 dark:bg-green-950 dark:text-green-300 dark:border-green-800"
-                          >
-                            <UserCheck className="h-3 w-3 mr-1" />
-                            {chat.assignedTo.name || chat.assignedTo.email}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">
-                            Unassigned
-                          </span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="secondary" className="text-xs">
-                          {chat._count?.messages || 0} messages
-                        </Badge>
-                      </TableCell>
-                      <TableCell
-                        className="text-sm text-muted-foreground"
-                        suppressHydrationWarning
-                      >
-                        {formatDate(chat.createdAt)}
-                      </TableCell>
-                      <TableCell
-                        className="text-sm text-muted-foreground"
-                        suppressHydrationWarning
-                      >
-                        {formatDate(chat.updatedAt)}
-                      </TableCell>
-                      <TableCell
-                        className="text-right"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="h-8 w-8 p-0">
-                              <span className="sr-only">Open menu</span>
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                            <DropdownMenuItem
-                              onClick={() => handleViewChat(chat.id)}
+                            <Button
+                              variant={
+                                page === currentPage ? "default" : "outline"
+                              }
+                              size="sm"
+                              onClick={() => {
+                                const newIndex = page - 1;
+                                handlePaginationChange(() => newIndex);
+                                table.setPageIndex(newIndex);
+                              }}
+                              className="h-9 w-9 p-0"
                             >
-                              <Eye className="h-4 w-4 mr-2" />
-                              View Chat
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem>Archive</DropdownMenuItem>
-                            <DropdownMenuItem className="text-red-600">
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+                              {page}
+                            </Button>
+                          </React.Fragment>
+                        );
+                      })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const newIndex = Math.min(
+                        table.getPageCount() - 1,
+                        initialPageIndex + 1
+                      );
+                      handlePaginationChange(() => newIndex);
+                      table.setPageIndex(newIndex);
+                    }}
+                    disabled={!table.getCanNextPage()}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

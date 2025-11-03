@@ -129,7 +129,7 @@ export default function NewChatPage() {
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 placeholder="Describe your issue or question..."
-                className="min-h-[200px]"
+                className="min-h-[200px] text-sm"
                 disabled={isCreating}
               />
               <Button
