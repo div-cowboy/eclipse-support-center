@@ -30,16 +30,16 @@ model User {
 }
 
 model Organization {
-  id          String                 @id @default(cuid())
-  name        String
-  description String?
-  slug        String                 @unique
-  createdAt   DateTime               @default(now())
-  updatedAt   DateTime               @updatedAt
-  chatbots    Chatbot[]
-  users       User[]                 @relation("OrganizationMembers")
-  documents   OrganizationDocument[]
-  tickets     Ticket[]
+  id           String                 @id @default(cuid())
+  name         String
+  description  String?
+  slug         String                 @unique
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+  chatbots     Chatbot[]
+  users        User[]                 @relation("OrganizationMembers")
+  documents    OrganizationDocument[]
+  tickets      Ticket[]
   supportForms SupportForm[]
 
   @@index([slug])
@@ -399,37 +399,37 @@ enum TicketActivityType {
 // Support Form Models
 
 model SupportForm {
-  id             String            @id @default(cuid())
+  id             String       @id @default(cuid())
   name           String
   description    String?
   organizationId String
-  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   // Form Configuration (stored as JSON for flexibility)
-  fields         Json              // Array of field definitions
-  settings       Json              // Form settings (theme, validation, redirects, etc.)
-  defaultValues  Json?             // Default values for auto-populated fields
+  fields        Json // Array of field definitions
+  settings      Json // Form settings (theme, validation, redirects, etc.)
+  defaultValues Json? // Default values for auto-populated fields
 
   // Status & Metadata
-  status         SupportFormStatus @default(ACTIVE)
-  isPublic       Boolean           @default(true) // Can be accessed via public URL
-  embedCode      String            @unique // Short code for embedding (e.g., "abc123")
+  status    SupportFormStatus @default(ACTIVE)
+  isPublic  Boolean           @default(true) // Can be accessed via public URL
+  embedCode String            @unique // Short code for embedding (e.g., "abc123")
 
   // Assignment & Routing
-  defaultCategory String?          // Default category for tickets from this form
+  defaultCategory String? // Default category for tickets from this form
   defaultPriority TicketPriority? // Default priority
-  autoAssignToId  String?          // Auto-assign tickets to specific agent
-  tags            String[]         @default([]) // Auto-tag tickets from this form
+  autoAssignToId  String? // Auto-assign tickets to specific agent
+  tags            String[]        @default([]) // Auto-tag tickets from this form
 
   // Analytics
-  submissionCount Int              @default(0) // Track submissions (for analytics)
+  submissionCount Int       @default(0) // Track submissions (for analytics)
   lastSubmittedAt DateTime?
 
   // Timestamps
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
-  createdById    String
-  createdBy      User              @relation("FormCreator", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  createdById String
+  createdBy   User     @relation("FormCreator", fields: [createdById], references: [id])
 
   // Relations
   ticketsFromForm Ticket[] @relation("FormTickets")
