@@ -26,6 +26,7 @@ model User {
   ticketResponses     TicketResponse[]
   ticketActivities    TicketActivity[]
   uploadedAttachments TicketAttachment[]
+  createdForms        SupportForm[]          @relation("FormCreator")
 }
 
 model Organization {
@@ -39,6 +40,7 @@ model Organization {
   users       User[]                 @relation("OrganizationMembers")
   documents   OrganizationDocument[]
   tickets     Ticket[]
+  supportForms SupportForm[]
 
   @@index([slug])
 }
@@ -241,6 +243,10 @@ model Ticket {
   originChat    Chat?    @relation(fields: [originChatId], references: [id])
   linkedChatIds String[] @default([])
 
+  // Form Integration
+  originFormId String?
+  originForm   SupportForm? @relation("FormTickets", fields: [originFormId], references: [id])
+
   // Metadata
   tags         String[] @default([])
   customFields Json?
@@ -271,6 +277,7 @@ model Ticket {
   @@index([createdAt])
   @@index([ticketNumber])
   @@index([originChatId])
+  @@index([originFormId])
 }
 
 model TicketResponse {
@@ -387,4 +394,54 @@ enum TicketActivityType {
   REOPENED
   RESOLVED
   CLOSED
+}
+
+// Support Form Models
+
+model SupportForm {
+  id             String            @id @default(cuid())
+  name           String
+  description    String?
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  // Form Configuration (stored as JSON for flexibility)
+  fields         Json              // Array of field definitions
+  settings       Json              // Form settings (theme, validation, redirects, etc.)
+  defaultValues  Json?             // Default values for auto-populated fields
+
+  // Status & Metadata
+  status         SupportFormStatus @default(ACTIVE)
+  isPublic       Boolean           @default(true) // Can be accessed via public URL
+  embedCode      String            @unique // Short code for embedding (e.g., "abc123")
+
+  // Assignment & Routing
+  defaultCategory String?          // Default category for tickets from this form
+  defaultPriority TicketPriority? // Default priority
+  autoAssignToId  String?          // Auto-assign tickets to specific agent
+  tags            String[]         @default([]) // Auto-tag tickets from this form
+
+  // Analytics
+  submissionCount Int              @default(0) // Track submissions (for analytics)
+  lastSubmittedAt DateTime?
+
+  // Timestamps
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  createdById    String
+  createdBy      User              @relation("FormCreator", fields: [createdById], references: [id])
+
+  // Relations
+  ticketsFromForm Ticket[] @relation("FormTickets")
+
+  @@index([organizationId])
+  @@index([embedCode])
+  @@index([status])
+  @@index([isPublic])
+}
+
+enum SupportFormStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
 }

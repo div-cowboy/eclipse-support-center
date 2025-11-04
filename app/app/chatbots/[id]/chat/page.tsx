@@ -17,7 +17,7 @@ export default function ChatPage({ params }: { params: { id: string } }) {
     className: "h-[600px]",
     features: {
       streaming: true,
-      escalation: true,
+      // escalation is always enabled - built-in feature
       debugMode: true,
       contextBlocks: true,
       multiChat: false,

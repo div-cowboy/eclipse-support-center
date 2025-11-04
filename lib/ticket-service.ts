@@ -30,6 +30,7 @@ export interface CreateTicketInput {
   customFields?: Record<string, any>;
   metadata?: Record<string, any>;
   originChatId?: string; // Optional: link to originating chat
+  originFormId?: string; // Optional: link to originating form
 }
 
 export interface CreateTicketFromChatInput {
@@ -103,12 +104,14 @@ export async function createTicket(
       customFields: input.customFields || {},
       metadata: input.metadata || {},
       originChatId: input.originChatId,
+      originFormId: input.originFormId,
     },
     include: {
       organization: true,
       requester: true,
       assignedTo: true,
       originChat: true,
+      originForm: true,
     },
   });
 
@@ -117,7 +120,11 @@ export async function createTicket(
     ticketId: ticket.id,
     activityType: TicketActivityType.CREATED,
     description: `Ticket created${
-      ticket.originChatId ? " from chat" : ""
+      ticket.originChatId
+        ? " from chat"
+        : ticket.originFormId
+        ? " from form"
+        : ""
     }`,
     performedById: input.requesterId || input.assignedToId,
     performedByName: input.requesterName,
@@ -292,6 +299,13 @@ export async function getTicket(ticketId: string) {
           },
         },
       },
+      originForm: {
+        select: {
+          id: true,
+          name: true,
+          embedCode: true,
+        },
+      },
       responses: {
         orderBy: { createdAt: "desc" },
         include: {
@@ -380,6 +394,13 @@ export async function listTickets(filters: TicketFilters) {
       requester: true,
       assignedTo: true,
       originChat: true,
+      originForm: {
+        select: {
+          id: true,
+          name: true,
+          embedCode: true,
+        },
+      },
       _count: {
         select: {
           responses: true,
@@ -482,6 +503,13 @@ export async function updateTicket(
       requester: true,
       assignedTo: true,
       originChat: true,
+      originForm: {
+        select: {
+          id: true,
+          name: true,
+          embedCode: true,
+        },
+      },
     },
   });
 

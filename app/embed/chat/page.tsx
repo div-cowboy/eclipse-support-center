@@ -341,7 +341,7 @@ function EmbedChatContent() {
       className: "h-full border-0 shadow-none",
       features: {
         streaming: true,
-        escalation: !isEscalated, // Hide escalation button once escalated
+        // escalation is always enabled - built-in feature
         multiChat: storageAvailable,
         realtimeMode: isEscalated && !!chatId, // Enable real-time mode after escalation
         showBranding: config.showBranding,

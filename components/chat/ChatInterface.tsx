@@ -21,7 +21,7 @@ export function ChatInterface({
     className: `h-[600px] ${className}`,
     features: {
       streaming: true,
-      escalation: false,
+      // escalation is always enabled - built-in feature
       debugMode: false,
       contextBlocks: false,
       multiChat: false,

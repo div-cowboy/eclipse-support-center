@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
 import { Button } from "@/components/shadcn/ui/button";
+import { Label } from "@/components/shadcn/ui/label";
 import {
   Card,
   CardContent,
@@ -589,4 +590,3 @@ export default function TicketDetailPage() {
     </div>
   );
 }
-

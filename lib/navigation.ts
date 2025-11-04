@@ -22,6 +22,11 @@ export const navigationLinks: NavigationItem[] = [
     icon: "Ticket",
   },
   {
+    title: "Support Forms",
+    href: "/app/forms",
+    icon: "FileText",
+  },
+  {
     title: "Chatbots",
     href: "/app/chatbots",
     icon: "Bot",

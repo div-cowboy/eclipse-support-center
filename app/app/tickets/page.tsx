@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/shadcn/ui/button";
 import { Input } from "@/components/shadcn/ui/input";
+import { Label } from "@/components/shadcn/ui/label";
 import {
   Card,
   CardContent,
@@ -65,6 +66,8 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<TicketListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showNewTicketModal, setShowNewTicketModal] = useState(false);
+  const [organizations, setOrganizations] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedOrgId, setSelectedOrgId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
@@ -79,20 +82,39 @@ export default function TicketsPage() {
 
   useEffect(() => {
     if (session?.user) {
+      loadOrganizations();
+    }
+  }, [session]);
+
+  useEffect(() => {
+    if (session?.user && selectedOrgId) {
       loadTickets();
     }
-  }, [session, searchQuery, statusFilter, priorityFilter, page]);
+  }, [session, selectedOrgId, searchQuery, statusFilter, priorityFilter, page]);
+
+  const loadOrganizations = async () => {
+    try {
+      const response = await fetch("/api/organizations");
+      if (response.ok) {
+        const data = await response.json();
+        setOrganizations(data);
+        // Auto-select first organization if available
+        if (data.length > 0 && !selectedOrgId) {
+          setSelectedOrgId(data[0].id);
+        }
+      }
+    } catch (error) {
+      console.error("Error loading organizations:", error);
+    }
+  };
 
   const loadTickets = async () => {
-    if (!session?.user) return;
+    if (!session?.user || !selectedOrgId) return;
 
     setIsLoading(true);
     try {
-      // For now, use first organization (in real app, get from user session)
-      const orgId = "cm3jykkxy0000xwnxrdfkxfnp"; // TODO: Get from user session
-
       const params = new URLSearchParams({
-        organizationId: orgId,
+        organizationId: selectedOrgId,
         page: page.toString(),
         limit: "20",
       });
@@ -179,11 +201,35 @@ export default function TicketsPage() {
           <Button
             onClick={() => setShowNewTicketModal(true)}
             className="flex items-center gap-2"
+            disabled={!selectedOrgId}
           >
             <Plus className="h-4 w-4" />
             New Ticket
           </Button>
         </div>
+
+        {/* Organization Selector */}
+        {organizations.length > 1 && (
+          <Card className="mb-4">
+            <CardContent className="pt-6">
+              <div className="flex items-center gap-4">
+                <Label htmlFor="organization-select">Organization:</Label>
+                <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
+                  <SelectTrigger id="organization-select" className="w-[300px]">
+                    <SelectValue placeholder="Select organization" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((org) => (
+                      <SelectItem key={org.id} value={org.id}>
+                        {org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Filters */}
         <Card>
@@ -398,7 +444,7 @@ export default function TicketsPage() {
             </CardHeader>
             <CardContent>
               <CreateTicketForm
-                organizationId="cm3jykkxy0000xwnxrdfkxfnp" // TODO: Get from session
+                organizationId={selectedOrgId}
                 mode="modal"
                 onSuccess={(ticket) => {
                   setShowNewTicketModal(false);

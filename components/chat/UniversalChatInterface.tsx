@@ -88,7 +88,7 @@ export interface ChatConfig {
   // Features
   features: {
     streaming?: boolean;
-    escalation?: boolean;
+    // escalation is always enabled - built-in feature
     debugMode?: boolean;
     contextBlocks?: boolean;
     multiChat?: boolean;
@@ -135,10 +135,10 @@ export function UniversalChatInterface({
       chatId: config.chatId,
       autoSendFirstMessage: config.autoSendFirstMessage,
       welcomeMessage: config.welcomeMessage,
-      featuresEscalation: config.features.escalation,
       featuresRealtimeMode: config.features.realtimeMode,
       featuresStreaming: config.features.streaming,
       apiEndpoint: config.apiEndpoint,
+      escalationEnabled: true, // Always enabled
     });
   }, []); // Only run once on mount
 
@@ -156,6 +156,27 @@ export function UniversalChatInterface({
     config.features.realtimeMode || false // If realtimeMode is enabled in config, escalation is active
   );
   const [awaitingSupport, setAwaitingSupport] = useState(false);
+
+  // Debug: Track escalation state changes
+  useEffect(() => {
+    console.log("[UniversalChatInterface] 🔄 ESCALATION STATE CHANGED:", {
+      escalationRequested,
+      escalationReason,
+      escalationActivated,
+      awaitingSupport,
+      configFeaturesRealtimeMode: config.features.realtimeMode,
+      chatId: config.chatId,
+      type: config.type,
+    });
+  }, [
+    escalationRequested,
+    escalationReason,
+    escalationActivated,
+    awaitingSupport,
+    config.features.realtimeMode,
+    config.chatId,
+    config.type,
+  ]);
 
   // Real-time chat state
   const [realtimeMode, setRealtimeMode] = useState(
@@ -785,6 +806,7 @@ export function UniversalChatInterface({
   };
 
   const handleStreamingResponse = async (response: Response) => {
+    console.log("[UniversalChatInterface] 📡 HANDLE STREAMING RESPONSE START");
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
 
@@ -851,22 +873,35 @@ export function UniversalChatInterface({
                 }
               }
 
-              // Check for escalation
-              if (
-                parsed.isComplete &&
-                parsed.escalationRequested &&
-                config.features.escalation
-              ) {
+              // Check for escalation - log EVERY chunk that has escalation data
+              if (parsed.escalationRequested !== undefined) {
+                console.log(
+                  "[UniversalChatInterface] 🔍 ESCALATION CHECK (streaming):",
+                  {
+                    isComplete: parsed.isComplete,
+                    parsedEscalationRequested: parsed.escalationRequested,
+                    parsedEscalationReason: parsed.escalationReason,
+                    currentEscalationRequested: escalationRequested,
+                    currentEscalationActivated: escalationActivated,
+                    chatId: config.chatId,
+                    type: config.type,
+                    rawParsed: parsed, // Log entire parsed object
+                  }
+                );
+              }
+
+              // Escalation is always enabled - detect and set state if present
+              if (parsed.isComplete && parsed.escalationRequested) {
                 console.log(
                   "[UniversalChatInterface] 🚨 ESCALATION DETECTED (streaming):",
                   {
                     escalationRequested: parsed.escalationRequested,
                     escalationReason: parsed.escalationReason,
-                    configFeaturesEscalation: config.features.escalation,
                     escalationActivated,
                     currentEscalationRequested: escalationRequested,
                     chatId: config.chatId,
                     type: config.type,
+                    willSetEscalation: true,
                   }
                 );
                 setEscalationRequested(true);
@@ -882,6 +917,15 @@ export function UniversalChatInterface({
                       "User requested human assistance",
                   }
                 );
+              } else if (parsed.escalationRequested && !parsed.isComplete) {
+                console.log(
+                  "[UniversalChatInterface] ⏳ ESCALATION DETECTED BUT NOT COMPLETE (streaming):",
+                  {
+                    isComplete: parsed.isComplete,
+                    escalationRequested: parsed.escalationRequested,
+                    waitingForComplete: true,
+                  }
+                );
               }
             } catch {
               // Ignore parsing errors for incomplete chunks
@@ -893,7 +937,16 @@ export function UniversalChatInterface({
   };
 
   const handleRegularResponse = async (response: Response) => {
+    console.log("[UniversalChatInterface] 📡 HANDLE REGULAR RESPONSE START");
     const data = await response.json();
+
+    console.log("[UniversalChatInterface] 📦 RAW API RESPONSE (regular):", {
+      success: data.success,
+      hasEscalationRequested: data.escalationRequested !== undefined,
+      escalationRequested: data.escalationRequested,
+      escalationReason: data.escalationReason,
+      fullResponse: data, // Log entire response for debugging
+    });
 
     if (data.success) {
       const assistantMessage: ChatMessage = {
@@ -925,18 +978,27 @@ export function UniversalChatInterface({
         setChatInfo(data.chat);
       }
 
-      // Check for escalation
-      if (data.escalationRequested && config.features.escalation) {
+      // Check for escalation - escalation is always enabled
+      console.log("[UniversalChatInterface] 🔍 ESCALATION CHECK (regular):", {
+        dataEscalationRequested: data.escalationRequested,
+        dataEscalationReason: data.escalationReason,
+        currentEscalationRequested: escalationRequested,
+        currentEscalationActivated: escalationActivated,
+        chatId: config.chatId,
+        type: config.type,
+      });
+
+      if (data.escalationRequested) {
         console.log(
           "[UniversalChatInterface] 🚨 ESCALATION DETECTED (regular):",
           {
             escalationRequested: data.escalationRequested,
             escalationReason: data.escalationReason,
-            configFeaturesEscalation: config.features.escalation,
             escalationActivated,
             currentEscalationRequested: escalationRequested,
             chatId: config.chatId,
             type: config.type,
+            willSetEscalation: true,
           }
         );
         setEscalationRequested(true);
@@ -951,14 +1013,11 @@ export function UniversalChatInterface({
               data.escalationReason || "User requested human assistance",
           }
         );
-      } else if (data.escalationRequested && !config.features.escalation) {
+      } else {
         console.log(
-          "[UniversalChatInterface] ⚠️ Escalation detected but features.escalation is false:",
+          "[UniversalChatInterface] ℹ️ NO ESCALATION IN RESPONSE (regular):",
           {
-            escalationRequested: data.escalationRequested,
-            configFeaturesEscalation: config.features.escalation,
-            chatId: config.chatId,
-            type: config.type,
+            dataEscalationRequested: data.escalationRequested,
           }
         );
       }
@@ -1618,26 +1677,28 @@ export function UniversalChatInterface({
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Escalation Button */}
+          {/* Escalation Button - Always enabled as built-in feature */}
           {(() => {
+            // Show escalation button if:
+            // 1. Escalation is requested
+            // 2. Escalation hasn't been activated yet
+            // Escalation is always enabled - no config check needed
             const shouldShowEscalation =
-              config.features.escalation &&
-              escalationRequested &&
-              !escalationActivated;
-            if (config.features.escalation || escalationRequested) {
-              console.log(
-                "[UniversalChatInterface] 🎨 ESCALATION UI RENDER CHECK:",
-                {
-                  shouldShow: shouldShowEscalation,
-                  configFeaturesEscalation: config.features.escalation,
-                  escalationRequested,
-                  escalationActivated,
-                  escalationReason,
-                  chatId: config.chatId,
-                  type: config.type,
-                }
-              );
-            }
+              escalationRequested && !escalationActivated;
+
+            console.log(
+              "[UniversalChatInterface] 🎨 ESCALATION UI RENDER CHECK (EVERY RENDER):",
+              {
+                shouldShow: shouldShowEscalation,
+                escalationRequested,
+                escalationActivated,
+                escalationReason,
+                chatId: config.chatId,
+                type: config.type,
+                willRenderButton: shouldShowEscalation,
+              }
+            );
+
             return shouldShowEscalation;
           })() && (
             <div className="border-t border-b bg-blue-50 dark:bg-blue-950 p-4 flex-shrink-0">

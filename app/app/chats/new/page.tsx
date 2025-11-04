@@ -66,7 +66,7 @@ export default function NewChatPage() {
       className: "h-[700px]",
       features: {
         streaming: false,
-        escalation: false,
+        // escalation is always enabled - built-in feature
         debugMode: false,
         contextBlocks: false,
         multiChat: false,

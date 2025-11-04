@@ -184,7 +184,7 @@ export default function ChatDetailPage() {
       className: "h-full",
       features: {
         streaming: false,
-        escalation: false, // Agents don't need escalation button
+        // escalation is always enabled - built-in feature
         debugMode: false,
         contextBlocks: false,
         multiChat: false,

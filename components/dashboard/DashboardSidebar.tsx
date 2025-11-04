@@ -14,7 +14,7 @@ import {
   SidebarMenuItem,
 } from "@/components/shadcn/ui/sidebar";
 import { navigationLinks } from "@/lib/navigation";
-import { LayoutDashboard, MessageSquare, Building2, Bot, Ticket } from "lucide-react";
+import { LayoutDashboard, MessageSquare, Building2, Bot, Ticket, FileText } from "lucide-react";
 
 const iconMap = {
   LayoutDashboard,
@@ -22,6 +22,7 @@ const iconMap = {
   Building2,
   Bot,
   Ticket,
+  FileText,
 };
 
 interface DashboardSidebarProps {
@@ -41,7 +42,7 @@ export function DashboardSidebar({ className }: DashboardSidebarProps) {
               {navigationLinks.map((item) => {
                 const IconComponent =
                   iconMap[item.icon as keyof typeof iconMap];
-                const isActive = pathname === item.href;
+                const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
 
                 return (
                   <SidebarMenuItem key={item.href}>
