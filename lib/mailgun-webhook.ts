@@ -164,3 +164,4 @@ export function parseSenderFromHeader(fromHeader: string): {
   return { email: fromHeader.trim() };
 }
 
+

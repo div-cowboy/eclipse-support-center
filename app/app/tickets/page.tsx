@@ -66,7 +66,9 @@ export default function TicketsPage() {
   const [tickets, setTickets] = useState<TicketListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showNewTicketModal, setShowNewTicketModal] = useState(false);
-  const [organizations, setOrganizations] = useState<Array<{ id: string; name: string }>>([]);
+  const [organizations, setOrganizations] = useState<
+    Array<{ id: string; name: string }>
+  >([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>("");
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -185,7 +187,7 @@ export default function TicketsPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4">
+    <div className="container mx-auto px-4">
       {/* Header */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-4">
@@ -460,4 +462,3 @@ export default function TicketsPage() {
     </div>
   );
 }
-

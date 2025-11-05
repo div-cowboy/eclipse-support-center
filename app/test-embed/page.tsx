@@ -137,8 +137,8 @@ export default function TestEmbedPage() {
             </h4>
             <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
               <li>Send a message in the chat below</li>
-              <li>Type: "I need to speak to a human"</li>
-              <li>Click "Connect with Customer Support"</li>
+              <li>Type: &quot;I need to speak to a human&quot;</li>
+              <li>Click &quot;Connect with Customer Support&quot;</li>
               <li>
                 Open{" "}
                 <a
@@ -150,10 +150,12 @@ export default function TestEmbedPage() {
                 </a>{" "}
                 in a new tab
               </li>
-              <li>Find the escalated chat and click "Assign to Me"</li>
               <li>
-                You should see "✅ You're now connected to [Name]" in THIS
-                iframe
+                Find the escalated chat and click &quot;Assign to Me&quot;
+              </li>
+              <li>
+                You should see &quot;✅ You&apos;re now connected to
+                [Name]&quot; in THIS iframe
               </li>
               <li>Messages should flow in real-time between both tabs!</li>
             </ol>

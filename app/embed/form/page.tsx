@@ -39,9 +39,13 @@ function EmbedFormContent() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
   const [submissionError, setSubmissionError] = useState<string>("");
+  const [csrfToken, setCsrfToken] = useState<string>("");
+  const [formLoadTime, setFormLoadTime] = useState<number>(0);
 
   useEffect(() => {
     if (embedCode) {
+      // Set form load time (for time-based validation)
+      setFormLoadTime(Date.now());
       loadForm();
     }
   }, [embedCode]);
@@ -53,6 +57,10 @@ function EmbedFormContent() {
 
       if (data.success) {
         setForm(data.form);
+        // Set CSRF token from response
+        if (data.csrfToken) {
+          setCsrfToken(data.csrfToken);
+        }
         // Apply default values
         if (data.form.defaultValues) {
           setFormData(data.form.defaultValues);
@@ -149,13 +157,24 @@ function EmbedFormContent() {
     setSubmissionError("");
 
     try {
+      // Add security fields to form data
+      const submissionData = {
+        ...formData,
+        _csrf_token: csrfToken, // CSRF token
+        _form_timestamp: formLoadTime.toString(), // Timestamp honeypot (filled by JS)
+        _form_load_time: formLoadTime.toString(), // Form load time for validation
+        // Honeypot fields (hidden, bots may fill these)
+        website: "", // Field name honeypot
+        url: "", // Field name honeypot
+      };
+
       const response = await fetch(`/api/forms/embed/${embedCode}/submit`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          formData,
+          formData: submissionData,
         }),
       });
 
@@ -256,6 +275,26 @@ function EmbedFormContent() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Honeypot fields (hidden, bots may fill these) */}
+              <div style={{ display: "none" }} aria-hidden="true">
+                <input
+                  type="text"
+                  name="website"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={formData.website || ""}
+                  onChange={() => {}} // No-op, but bots may fill it
+                />
+                <input
+                  type="text"
+                  name="url"
+                  tabIndex={-1}
+                  autoComplete="off"
+                  value={formData.url || ""}
+                  onChange={() => {}} // No-op, but bots may fill it
+                />
+              </div>
+
               {sortedFields.map((field) => (
                 <div key={field.id} className="space-y-2">
                   <Label htmlFor={field.id}>

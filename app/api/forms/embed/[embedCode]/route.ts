@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { getFormByEmbedCode } from "@/lib/form-service";
+import { generateCSRFToken } from "@/lib/form-security";
 
 /**
  * GET /api/forms/embed/[embedCode]
@@ -36,7 +37,11 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({
+    // Generate CSRF token for form submission
+    const csrfToken = generateCSRFToken();
+
+    // Set CSRF token in cookie (for same-site validation)
+    const response = NextResponse.json({
       success: true,
       form: {
         id: form.id,
@@ -48,7 +53,19 @@ export async function GET(
         embedCode: form.embedCode,
         organizationId: form.organizationId,
       },
+      csrfToken, // Include token in response for client
     });
+
+    // Set CSRF token cookie (30 minute expiration)
+    response.cookies.set("form_csrf_token", csrfToken, {
+      httpOnly: false, // Need to access from client for form submission
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 30 * 60, // 30 minutes
+      path: "/",
+    });
+
+    return response;
   } catch (error) {
     console.error("Error fetching form:", error);
     const errorMessage =

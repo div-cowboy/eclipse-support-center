@@ -22,9 +22,11 @@ import {
   PhoneCall,
   UserCheck,
   UserX,
+  Ticket,
 } from "lucide-react";
 import { UniversalChatInterface } from "@/components/chat/UniversalChatInterface";
 import { VectorSearchResult } from "@/lib/vector-db";
+import { CreateTicketFromChatModal } from "@/components/tickets/CreateTicketFromChatModal";
 
 interface TraditionalChat {
   id: string;
@@ -73,6 +75,7 @@ export default function ChatDetailPage() {
   const [chat, setChat] = useState<TraditionalChat | null>(null);
   const [loading, setLoading] = useState(true);
   const [assigningChat, setAssigningChat] = useState(false);
+  const [showTicketModal, setShowTicketModal] = useState(false);
 
   useEffect(() => {
     const fetchChat = async () => {
@@ -413,6 +416,19 @@ export default function ChatDetailPage() {
                   {assigningChat ? "Picking Up..." : "Pick Up Chat"}
                 </Button>
               )}
+
+              {/* Create Ticket Button */}
+              {chat.chatbot?.organization?.id && (
+                <Button
+                  onClick={() => setShowTicketModal(true)}
+                  variant="default"
+                  size="sm"
+                  className="w-full"
+                >
+                  <Ticket className="h-4 w-4 mr-2" />
+                  Create Ticket
+                </Button>
+              )}
             </CardContent>
           </Card>
 
@@ -518,6 +534,21 @@ export default function ChatDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Create Ticket Modal */}
+      {chat?.chatbot?.organization?.id && (
+        <CreateTicketFromChatModal
+          chatId={chat.id}
+          organizationId={chat.chatbot.organization.id}
+          isOpen={showTicketModal}
+          onClose={() => setShowTicketModal(false)}
+          onSuccess={(ticket) => {
+            setShowTicketModal(false);
+            // Navigate to the created ticket
+            router.push(`/app/tickets/${ticket.id}`);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -46,6 +46,7 @@ interface TicketDetail {
   tags: string[];
   requesterName: string;
   requesterEmail: string;
+  organizationId: string;
   assignedTo?: {
     id: string;
     name: string;
@@ -80,6 +81,13 @@ interface TicketDetail {
   updatedAt: string;
 }
 
+interface User {
+  id: string;
+  name: string | null;
+  email: string;
+  image: string | null;
+}
+
 export default function TicketDetailPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
@@ -91,6 +99,8 @@ export default function TicketDetailPage() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [showActivities, setShowActivities] = useState(false);
   const [showInternalNotes, setShowInternalNotes] = useState(true);
+  const [users, setUsers] = useState<User[]>([]);
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -104,13 +114,33 @@ export default function TicketDetailPage() {
     }
   }, [session, ticketId]);
 
+  useEffect(() => {
+    if (ticket?.organizationId) {
+      loadUsers(ticket.organizationId);
+    }
+  }, [ticket?.organizationId]);
+
   const loadTicket = async () => {
     setIsLoading(true);
     try {
       const response = await fetch(`/api/tickets/${ticketId}`);
       if (response.ok) {
         const data = await response.json();
-        setTicket(data.ticket);
+        // Transform the ticket data to match our interface
+        const ticketData: TicketDetail = {
+          ...data.ticket,
+          organizationId: data.ticket.organization?.id || data.ticket.organizationId,
+          requesterName: data.ticket.requester?.name || data.ticket.requesterName,
+          requesterEmail: data.ticket.requester?.email || data.ticket.requesterEmail,
+          assignedTo: data.ticket.assignedTo
+            ? {
+                id: data.ticket.assignedTo.id,
+                name: data.ticket.assignedTo.name || "",
+                email: data.ticket.assignedTo.email,
+              }
+            : null,
+        };
+        setTicket(ticketData);
       } else {
         console.error("Failed to load ticket");
         router.push("/app/tickets");
@@ -123,7 +153,29 @@ export default function TicketDetailPage() {
     }
   };
 
-  const updateTicket = async (updates: Partial<TicketDetail>) => {
+  const loadUsers = async (organizationId: string) => {
+    setIsLoadingUsers(true);
+    try {
+      const response = await fetch(
+        `/api/users?organizationId=${organizationId}`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(data);
+      }
+    } catch (error) {
+      console.error("Error loading users:", error);
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  };
+
+  const handleAssignToMe = async () => {
+    if (!session?.user?.id) return;
+    await updateTicket({ assignedToId: session.user.id });
+  };
+
+  const updateTicket = async (updates: { assignedToId?: string | null; status?: TicketStatus; priority?: TicketPriority }) => {
     setIsUpdating(true);
     try {
       const response = await fetch(`/api/tickets/${ticketId}`, {
@@ -136,9 +188,14 @@ export default function TicketDetailPage() {
 
       if (response.ok) {
         await loadTicket();
+      } else {
+        const error = await response.json();
+        console.error("Error updating ticket:", error);
+        alert(error.error || "Failed to update ticket");
       }
     } catch (error) {
       console.error("Error updating ticket:", error);
+      alert("Failed to update ticket");
     } finally {
       setIsUpdating(false);
     }
@@ -197,7 +254,7 @@ export default function TicketDetailPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4">
+    <div className="container mx-auto px-4">
       {/* Header */}
       <div className="mb-6">
         <Button
@@ -516,21 +573,59 @@ export default function TicketDetailPage() {
                 <Label className="text-xs text-muted-foreground">
                   Assigned To
                 </Label>
-                <div className="mt-1.5">
-                  {ticket.assignedTo ? (
-                    <div className="flex items-center gap-2">
+                <div className="mt-1.5 space-y-2">
+                  <Select
+                    value={ticket.assignedTo?.id || "unassigned"}
+                    onValueChange={(value) => {
+                      if (value === "unassigned") {
+                        updateTicket({ assignedToId: null });
+                      } else {
+                        updateTicket({ assignedToId: value });
+                      }
+                    }}
+                    disabled={isUpdating || isLoadingUsers}
+                  >
+                    <SelectTrigger className="mt-1.5">
+                      <SelectValue>
+                        {ticket.assignedTo
+                          ? `${ticket.assignedTo.name || ticket.assignedTo.email}`
+                          : "Unassigned"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      {users.map((user) => (
+                        <SelectItem key={user.id} value={user.id}>
+                          {user.name || user.email}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {session?.user?.id &&
+                    ticket.assignedTo?.id !== session.user.id && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleAssignToMe}
+                        disabled={isUpdating}
+                        className="w-full"
+                      >
+                        <User className="h-4 w-4 mr-2" />
+                        Assign to Me
+                      </Button>
+                    )}
+                  {ticket.assignedTo && (
+                    <div className="flex items-center gap-2 pt-2 border-t">
                       <User className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <div className="text-sm font-medium">
-                          {ticket.assignedTo.name}
+                      <div className="flex-1">
+                        <div className="text-xs text-muted-foreground">
+                          {ticket.assignedTo.name || ticket.assignedTo.email}
                         </div>
                         <div className="text-xs text-muted-foreground">
                           {ticket.assignedTo.email}
                         </div>
                       </div>
                     </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">Unassigned</p>
                   )}
                 </div>
               </div>

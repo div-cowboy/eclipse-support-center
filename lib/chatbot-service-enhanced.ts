@@ -18,8 +18,7 @@ const GLOBAL_CHATBOT_RULES = [
   "• ESCALATION PROTOCOL: ONLY trigger escalation if the user EXPLICITLY requests to speak with a human, real person, agent, or representative. Do NOT escalate for normal customer service questions (returns, exchanges, order status, product questions, etc.) even if the user uses the word 'request'.",
   "• ESCALATION TRIGGERS (user must explicitly say one of these): 'speak to a human', 'talk to a person', 'speak to someone', 'contact a representative', 'talk to an agent', 'speak to a manager', 'I want a human', 'connect me with someone', 'transfer me to a person'",
   "• DO NOT ESCALATE FOR: Questions about returns, exchanges, refunds, order status, shipping, product information, policies, or general customer service questions. These are normal support inquiries that you can handle.",
-  "• When escalation IS triggered, you MUST include the exact text [ESCALATION_REQUESTED] at the very end of your response (after all other content). This is a system marker and critical for routing.",
-  "• Respond empathetically when escalation is needed: 'I understand you'd like to speak with a human representative. I've noted your request and a customer support button will appear for you to connect with our team. Is there anything else I can help you with in the meantime?'",
+  "• Respond empathetically when escalation is needed: 'I understand you'd like to speak with a human representative. I've noted your request and a customer support button will appear for you to connect with our team.'",
   "• Always prioritize user satisfaction and acknowledge when you may not be able to fully address their needs",
   "• Be transparent about your limitations as an AI assistant",
   "• Never pretend to be human or claim capabilities you don't have",
@@ -89,29 +88,44 @@ export class EnhancedChatbotService {
   }
 
   /**
-   * Detect if escalation was requested in the response
+   * Detect if escalation was requested in the user message
    * Returns the cleaned content and escalation status
    */
-  private detectEscalation(content: string): {
+  private detectEscalation(
+    userMessage: string,
+    responseContent: string
+  ): {
     cleanContent: string;
     escalationRequested: boolean;
     escalationReason?: string;
   } {
-    const escalationMarker = "[ESCALATION_REQUESTED]";
-    const hasEscalation = content.includes(escalationMarker);
+    const escalationTriggers = [
+      "speak to a human",
+      "talk to a person",
+      "speak to someone",
+      "contact a representative",
+      "talk to an agent",
+      "speak to a manager",
+      "i want a human",
+      "connect me with someone",
+      "transfer me to a person",
+    ];
+
+    const lowerMessage = userMessage.toLowerCase();
+    const hasEscalation = escalationTriggers.some((trigger) =>
+      lowerMessage.includes(trigger)
+    );
 
     if (hasEscalation) {
-      // Remove the marker from the content
-      const cleanContent = content.replace(escalationMarker, "").trim();
       return {
-        cleanContent,
+        cleanContent: responseContent,
         escalationRequested: true,
         escalationReason: "User requested human assistance",
       };
     }
 
     return {
-      cleanContent: content,
+      cleanContent: responseContent,
       escalationRequested: false,
     };
   }
@@ -230,8 +244,11 @@ export class EnhancedChatbotService {
         maxCompletionTokens: finalConfig.maxTokens,
       });
 
-      // Step 6: Detect escalation in response
-      const escalationDetection = this.detectEscalation(grokResponse.content);
+      // Step 6: Detect escalation in user message
+      const escalationDetection = this.detectEscalation(
+        userMessage,
+        grokResponse.content
+      );
 
       // Step 7: Create response message
       const responseMessage: ChatMessage = {
@@ -378,7 +395,10 @@ export class EnhancedChatbotService {
 
         // On the final chunk, detect escalation and send metadata only (no content to avoid duplication)
         if (chunk.isComplete) {
-          const escalationDetection = this.detectEscalation(accumulatedContent);
+          const escalationDetection = this.detectEscalation(
+            userMessage,
+            accumulatedContent
+          );
           yield {
             content: "", // Empty string - all content already streamed
             isComplete: true,

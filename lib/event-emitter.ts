@@ -4,12 +4,12 @@
  */
 
 export class EventEmitter {
-  private events: { [key: string]: Function[] } = {};
+  private events: { [key: string]: ((data: any) => void)[] } = {};
 
   /**
    * Subscribe to an event
    */
-  on(event: string, callback: Function): void {
+  on(event: string, callback: (data: any) => void): void {
     if (!this.events[event]) {
       this.events[event] = [];
     }
@@ -34,7 +34,7 @@ export class EventEmitter {
   /**
    * Unsubscribe from an event
    */
-  off(event: string, callback: Function): void {
+  off(event: string, callback: (data: any) => void): void {
     if (this.events[event]) {
       this.events[event] = this.events[event].filter((cb) => cb !== callback);
     }

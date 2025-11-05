@@ -30,13 +30,6 @@ export function useRealtimeChat(
   options: Parameters<typeof useWebSocketChat>[0]
 ) {
   // Use WebSocket if enabled, otherwise fall back to Supabase
-  if (USE_WEBSOCKET) {
-    console.log("[useRealtimeChat] → Using WebSocket implementation");
-    return useWebSocketChat(options);
-  } else {
-    console.log("[useRealtimeChat] → Using Supabase implementation");
-    return useSupabaseRealtimeChat(options) as ReturnType<
-      typeof useWebSocketChat
-    >;
-  }
+  console.log("[useRealtimeChat] → Using WebSocket implementation");
+  return useWebSocketChat(options);
 }

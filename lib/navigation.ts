@@ -36,4 +36,9 @@ export const navigationLinks: NavigationItem[] = [
     href: "/app/organizations",
     icon: "Building2",
   },
+  {
+    title: "Settings",
+    href: "/app/settings",
+    icon: "Settings",
+  },
 ];

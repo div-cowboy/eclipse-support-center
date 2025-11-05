@@ -22,6 +22,7 @@ import {
   Bot,
   Ticket,
   FileText,
+  Settings,
 } from "lucide-react";
 
 const iconMap = {
@@ -31,6 +32,7 @@ const iconMap = {
   Bot,
   Ticket,
   FileText,
+  Settings,
 };
 
 interface DashboardSidebarProps {

@@ -87,9 +87,7 @@ export interface TicketFilters {
 /**
  * Create a new ticket
  */
-export async function createTicket(
-  input: CreateTicketInput
-): Promise<Ticket> {
+export async function createTicket(input: CreateTicketInput): Promise<Ticket> {
   const ticket = await prisma.ticket.create({
     data: {
       organizationId: input.organizationId,
@@ -190,7 +188,7 @@ export async function createTicketFromChat(
   const requesterId = firstUserMessage?.userId || undefined;
 
   // Generate chat transcript if requested
-  let description = input.includeTranscript
+  const description = input.includeTranscript
     ? await formatChatTranscript(chat.id)
     : chat.description || chat.title;
 
@@ -263,10 +261,7 @@ export async function formatChatTranscript(chatId: string): Promise<string> {
 
   const transcript = chat.messages
     .map((msg) => {
-      const timestamp = format(
-        new Date(msg.createdAt),
-        "MMM dd, yyyy HH:mm"
-      );
+      const timestamp = format(new Date(msg.createdAt), "MMM dd, yyyy HH:mm");
       const role =
         msg.role === "USER"
           ? "Customer"
@@ -451,16 +446,16 @@ export async function updateTicket(
     activityType = TicketActivityType.STATUS_CHANGED;
 
     if (input.status === TicketStatus.RESOLVED) {
-      activityType = TicketActivityType.RESOLVED;
+      activityType = TicketActivityType.STATUS_CHANGED;
     } else if (input.status === TicketStatus.CLOSED) {
-      activityType = TicketActivityType.CLOSED;
+      activityType = TicketActivityType.STATUS_CHANGED;
     }
   }
 
   if (input.priority && input.priority !== currentTicket.priority) {
     changes.priority = { from: currentTicket.priority, to: input.priority };
     activityDescription = `Priority changed from ${currentTicket.priority} to ${input.priority}`;
-    activityType = TicketActivityType.PRIORITY_CHANGED;
+    activityType = TicketActivityType.STATUS_CHANGED;
   }
 
   if (
@@ -474,9 +469,7 @@ export async function updateTicket(
     activityDescription = input.assignedToId
       ? `Ticket assigned`
       : `Ticket unassigned`;
-    activityType = input.assignedToId
-      ? TicketActivityType.ASSIGNED
-      : TicketActivityType.UNASSIGNED;
+    activityType = TicketActivityType.STATUS_CHANGED;
   }
 
   // Update ticket
@@ -744,4 +737,3 @@ export async function getTicketStats(organizationId: string) {
     },
   };
 }
-
