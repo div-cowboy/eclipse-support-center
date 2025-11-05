@@ -252,7 +252,7 @@ export function UniversalChatInterface({
         return [...withoutOptimistic, chatMessage];
       });
     },
-    // @ts-expect-error - onMessageUpdated is supported but TypeScript cache may not reflect it yet
+
     onMessageUpdated: (message: {
       id: string;
       content: string;

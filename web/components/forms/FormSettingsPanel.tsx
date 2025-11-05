@@ -118,6 +118,7 @@ export function FormSettingsPanel({
                 updateSettings({
                   submitButton: {
                     ...settings.submitButton,
+                    text: settings.submitButton?.text || "",
                     color: e.target.value,
                   },
                 })
@@ -301,7 +302,9 @@ export function FormSettingsPanel({
             <Select
               value={defaultPriority || "__none__"}
               onValueChange={(value) =>
-                updatePriority(value === "__none__" ? null : (value as TicketPriority))
+                updatePriority(
+                  value === "__none__" ? null : (value as TicketPriority)
+                )
               }
             >
               <SelectTrigger>
@@ -332,4 +335,3 @@ export function FormSettingsPanel({
     </Card>
   );
 }
-

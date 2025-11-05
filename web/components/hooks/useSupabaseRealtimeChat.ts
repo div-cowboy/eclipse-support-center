@@ -223,7 +223,10 @@ export function useRealtimeChat({
 
   // Send message function
   const sendMessage = useCallback(
-    async (content: string, role: "USER" | "ASSISTANT"): Promise<boolean> => {
+    async (
+      content: string,
+      role: "USER" | "ASSISTANT" | "AGENT"
+    ): Promise<boolean> => {
       if (!chatId) {
         setError("No chat ID provided");
         return false;
