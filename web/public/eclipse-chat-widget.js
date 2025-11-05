@@ -269,8 +269,17 @@ class EclipseChatWidget {
       );
     }
 
-    const iframeUrl = `http://localhost:3000/embed/chat?${params.toString()}`;
-    console.log("[EclipseChatWidget] 🔗 Generated iframe URL:", iframeUrl);
+    // Use baseUrl if provided, otherwise use current origin (for same-origin embedding)
+    // If neither works, fall back to detecting from script tag or window.location
+    let baseUrl = "https://eclipse-support-center-git-main-wmg.vercel.app";
+
+    const iframeUrl = `${baseUrl}/embed/chat?${params.toString()}`;
+    console.log("[EclipseChatWidget] 🔗 Generated iframe URL:", iframeUrl, {
+      baseUrl,
+      providedBaseUrl: this.baseUrl,
+      currentOrigin:
+        typeof window !== "undefined" ? window.location.origin : "N/A",
+    });
     this.iframe.src = iframeUrl;
     this.iframe.style.cssText = `
       width: 100%;

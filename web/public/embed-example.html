@@ -233,10 +233,14 @@
   <script src="/eclipse-chat-widget.js"></script>
   <script>
     // Get base URL (works in both dev and production)
-    // For testing, if opened as file://, use localhost
-    const baseURL = window.location.protocol === 'file:' 
-      ? 'http://localhost:3000' 
-      : window.location.origin;
+    // Use current origin if available, otherwise use production URL for file:// context
+    let baseURL = window.location.origin;
+    
+    // Only use production URL fallback if opened as file:// (local testing)
+    if (window.location.protocol === 'file:' || !baseURL || baseURL === 'null') {
+      // For local file testing, use production URL (change this to your Vercel URL)
+      baseURL = 'https://eclipse-support-center-git-main-wmg.vercel.app';
+    }
     
     console.log('🌐 Base URL:', baseURL);
     console.log('🔗 Current origin:', window.location.origin);
