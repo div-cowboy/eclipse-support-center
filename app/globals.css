@@ -129,3 +129,8 @@ button:hover {
 .animate-accordion-up {
   animation: accordion-up 0.2s ease-out;
 }
+
+.wrapper {
+  max-width: 90vw;
+  margin: 0 auto;
+}

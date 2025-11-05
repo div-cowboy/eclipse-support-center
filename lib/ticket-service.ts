@@ -14,6 +14,7 @@ import {
   ResponseAuthorType,
 } from "@prisma/client";
 import { format } from "date-fns";
+import { sendTicketResponseEmail } from "./mailgun-service";
 
 // Types
 export interface CreateTicketInput {
@@ -61,6 +62,7 @@ export interface AddResponseInput {
   ticketId: string;
   content: string;
   isInternal?: boolean;
+  sendEmail?: boolean;
   authorId?: string;
   authorEmail: string;
   authorName: string;
@@ -582,6 +584,49 @@ export async function addResponse(
     performedById: input.authorId,
     performedByName: input.authorName,
   });
+
+  // Send email to customer if requested and not internal
+  if (input.sendEmail && !input.isInternal) {
+    try {
+      // Generate ticket URL (you may want to make this configurable)
+      const ticketUrl = process.env.NEXT_PUBLIC_APP_URL
+        ? `${process.env.NEXT_PUBLIC_APP_URL}/app/tickets/${input.ticketId}`
+        : undefined;
+
+      const emailResult = await sendTicketResponseEmail(
+        ticket.ticketNumber,
+        ticket.subject,
+        ticket.requesterName,
+        ticket.requesterEmail,
+        input.content,
+        input.authorName,
+        ticketUrl,
+        ticket.id // Pass ticketId for reply-to address
+      );
+
+      // Update response with email tracking
+      await prisma.ticketResponse.update({
+        where: { id: response.id },
+        data: {
+          isEmailSent: true,
+          emailMessageId: emailResult.id || emailResult.message || undefined,
+        },
+      });
+
+      // Create activity log for email sent
+      await createActivity({
+        ticketId: input.ticketId,
+        activityType: TicketActivityType.RESPONDED,
+        description: "Email notification sent to customer",
+        performedById: input.authorId,
+        performedByName: input.authorName,
+      });
+    } catch (error: any) {
+      // Log error but don't fail the response creation
+      console.error("Error sending email notification:", error);
+      // You might want to create an activity log for this error
+    }
+  }
 
   return response;
 }

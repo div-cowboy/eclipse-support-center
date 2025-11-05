@@ -1,6 +1,6 @@
 "use client";
 
-import { DashboardHeader } from "./DashboardHeader";
+import DashboardGlobalSidebar from "./DashboardGlobalSidebar";
 import { DashboardSidebar } from "./DashboardSidebar";
 import { SidebarProvider } from "@/components/shadcn/ui/sidebar";
 
@@ -13,23 +13,21 @@ interface DashboardLayoutProps {
   };
 }
 
-export function DashboardLayout({ children, user }: DashboardLayoutProps) {
+export function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <SidebarProvider>
-      <div className="grid h-screen w-full grid-rows-[auto_1fr]">
+      <div className="h-screen w-full">
         {/* Header spans full width */}
-        <DashboardHeader user={user} />
+        {/* <DashboardHeader user={user} /> */}
 
-        {/* Content area with sidebar */}
-        <div className="flex h-full overflow-hidden">
-          <div className="w-[250px] max-w-[250px]">
-            <DashboardSidebar className="w-full max-w-[250px]" />
-          </div>
+        {/* Fixed sidebars - full height */}
+        <DashboardGlobalSidebar />
+        <DashboardSidebar />
 
-          <main className="w-[calc(100%-350px)] overflow-auto p-10 flex-1">
-            <div className="mx-auto max-w-8xl">{children}</div>
-          </main>
-        </div>
+        {/* Main content - accounts for both sidebars (70px + 250px = 320px) */}
+        <main className="ml-[320px] h-screen overflow-auto p-10">
+          <div className="mx-auto max-w-8xl">{children}</div>
+        </main>
       </div>
     </SidebarProvider>
   );

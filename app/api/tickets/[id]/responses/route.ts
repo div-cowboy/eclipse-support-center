@@ -37,6 +37,7 @@ export async function POST(
       ticketId: params.id,
       content: body.content,
       isInternal: body.isInternal || false,
+      sendEmail: body.sendEmail || false,
       authorId: session.user.id,
       authorEmail: session.user.email || "unknown@example.com",
       authorName: session.user.name || "Unknown User",

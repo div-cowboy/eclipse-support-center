@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/shadcn/ui/button";
 import { Textarea } from "@/components/shadcn/ui/textarea";
 import { Label } from "@/components/shadcn/ui/label";
+import { Checkbox } from "@/components/shadcn/ui/checkbox";
 import { Loader2 } from "lucide-react";
 
 interface TicketResponseFormProps {
@@ -17,6 +18,7 @@ export function TicketResponseForm({
 }: TicketResponseFormProps) {
   const [content, setContent] = useState("");
   const [isInternal, setIsInternal] = useState(false);
+  const [sendEmail, setSendEmail] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +42,7 @@ export function TicketResponseForm({
         body: JSON.stringify({
           content: content.trim(),
           isInternal,
+          sendEmail: sendEmail && !isInternal, // Only send email if not internal
         }),
       });
 
@@ -51,6 +54,7 @@ export function TicketResponseForm({
 
       setContent("");
       setIsInternal(false);
+      setSendEmail(false);
 
       if (onSuccess) {
         onSuccess(data.response);
@@ -85,17 +89,37 @@ export function TicketResponseForm({
         />
       </div>
 
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          id="isInternal"
-          checked={isInternal}
-          onChange={(e) => setIsInternal(e.target.checked)}
-          className="rounded border-gray-300"
-        />
-        <Label htmlFor="isInternal" className="cursor-pointer">
-          Internal note (not visible to customer)
-        </Label>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="isInternal"
+            checked={isInternal}
+            onCheckedChange={(checked) => {
+              setIsInternal(checked === true);
+              if (checked) {
+                setSendEmail(false); // Disable email when internal
+              }
+            }}
+            disabled={isLoading}
+          />
+          <Label htmlFor="isInternal" className="cursor-pointer">
+            Internal note (not visible to customer)
+          </Label>
+        </div>
+
+        {!isInternal && (
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="sendEmail"
+              checked={sendEmail}
+              onCheckedChange={(checked) => setSendEmail(checked === true)}
+              disabled={isLoading}
+            />
+            <Label htmlFor="sendEmail" className="cursor-pointer">
+              Send customer email update
+            </Label>
+          </div>
+        )}
       </div>
 
       <div className="flex gap-3 justify-end">

@@ -14,7 +14,15 @@ import {
   SidebarMenuItem,
 } from "@/components/shadcn/ui/sidebar";
 import { navigationLinks } from "@/lib/navigation";
-import { LayoutDashboard, MessageSquare, Building2, Bot, Ticket, FileText } from "lucide-react";
+import { cn } from "@/lib/utils";
+import {
+  LayoutDashboard,
+  MessageSquare,
+  Building2,
+  Bot,
+  Ticket,
+  FileText,
+} from "lucide-react";
 
 const iconMap = {
   LayoutDashboard,
@@ -33,16 +41,32 @@ export function DashboardSidebar({ className }: DashboardSidebarProps) {
   const pathname = usePathname();
 
   return (
-    <Sidebar className={className}>
-      <SidebarContent className="pt-15">
+    <Sidebar
+      className={cn(
+        "fixed left-[70px] top-0 h-screen w-[250px] z-10 border-r border-gray-200",
+        className
+      )}
+      collapsible="none"
+      style={
+        {
+          "--sidebar-width": "250px",
+        } as React.CSSProperties
+      }
+    >
+      <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <div className="sidebar-title pb-4 pt-[1px] px-2">
+            <h1 className="text-xl font-bold">Help Desk</h1>
+          </div>
+
           <SidebarGroupContent>
             <SidebarMenu>
               {navigationLinks.map((item) => {
                 const IconComponent =
                   iconMap[item.icon as keyof typeof iconMap];
-                const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
+                const isActive =
+                  pathname === item.href ||
+                  pathname?.startsWith(item.href + "/");
 
                 return (
                   <SidebarMenuItem key={item.href}>
