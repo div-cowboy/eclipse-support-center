@@ -27,14 +27,15 @@ import {
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { embedCode: string } }
+  { params }: { params: Promise<{ embedCode: string }> }
 ) {
   try {
     // Get client IP address
     const clientIP = getClientIP(request);
 
     // Get form by embed code
-    const form = await getFormByEmbedCode(params.embedCode);
+    const { embedCode } = await params;
+    const form = await getFormByEmbedCode(embedCode);
 
     if (!form) {
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
@@ -58,7 +59,7 @@ export async function POST(
     // Rate limiting check (before processing form data)
     const rateLimitResult = await checkFormSubmissionRateLimit(
       clientIP,
-      params.embedCode,
+      embedCode,
       form.organizationId
     );
 
@@ -113,7 +114,7 @@ export async function POST(
       // Silently reject (don't reveal detection)
       // Log for analytics
       console.warn("Honeypot triggered:", {
-        embedCode: params.embedCode,
+        embedCode: embedCode,
         ip: hashIP(clientIP),
         triggers: honeypotCheck.triggered,
       });

@@ -13,7 +13,7 @@ import { getForm } from "@/lib/form-service";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -22,7 +22,8 @@ export async function GET(
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const form = await getForm(params.id);
+    const { id } = await params;
+    const form = await getForm(id);
 
     if (!form) {
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
@@ -54,4 +55,3 @@ export async function GET(
     );
   }
 }
-

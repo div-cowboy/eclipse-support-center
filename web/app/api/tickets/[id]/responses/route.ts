@@ -14,7 +14,7 @@ import { ResponseAuthorType } from "@prisma/client";
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -22,7 +22,7 @@ export async function POST(
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
+    const { id } = await params;
     const body = await request.json();
 
     // Validate required fields
@@ -34,7 +34,7 @@ export async function POST(
     }
 
     const response = await addResponse({
-      ticketId: params.id,
+      ticketId: id,
       content: body.content,
       isInternal: body.isInternal || false,
       sendEmail: body.sendEmail || false,

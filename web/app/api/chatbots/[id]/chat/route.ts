@@ -245,7 +245,7 @@ async function handleStreamingResponse(
 
   let fullResponse = "";
   let responseSources: any[] = [];
-  let escalationData: {
+  const escalationData: {
     escalationRequested?: boolean;
     escalationReason?: string;
   } = {};

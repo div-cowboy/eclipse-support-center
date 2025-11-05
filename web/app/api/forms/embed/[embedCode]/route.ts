@@ -13,10 +13,11 @@ import { generateCSRFToken } from "@/lib/form-security";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { embedCode: string } }
+  { params }: { params: Promise<{ embedCode: string }> }
 ) {
   try {
-    const form = await getFormByEmbedCode(params.embedCode);
+    const { embedCode } = await params;
+    const form = await getFormByEmbedCode(embedCode);
 
     if (!form) {
       return NextResponse.json({ error: "Form not found" }, { status: 404 });
@@ -73,4 +74,3 @@ export async function GET(
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
 }
-

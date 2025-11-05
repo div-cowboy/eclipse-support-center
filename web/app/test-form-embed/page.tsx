@@ -8,6 +8,8 @@ export default function TestFormEmbedPage() {
   const [height, setHeight] = useState("600");
   const [iframeKey, setIframeKey] = useState(0);
 
+  const isWindow = typeof window !== "undefined";
+
   const buildIframeUrl = () => {
     if (!embedCode) return "";
     return `/embed/form?code=${embedCode}`;
@@ -29,6 +31,10 @@ export default function TestFormEmbedPage() {
     setIframeKey((prev) => prev + 1);
   };
 
+  if (!isWindow) {
+    return null;
+  }
+
   const copyEmbedCode = () => {
     if (!embedCode) {
       alert("Please enter a form embed code first");
@@ -36,19 +42,22 @@ export default function TestFormEmbedPage() {
     }
 
     const iframeCode = `<iframe src="${window.location.origin}/embed/form?code=${embedCode}" width="${width}" height="${height}" frameborder="0"></iframe>`;
-    
-    navigator.clipboard.writeText(iframeCode).then(() => {
-      alert("Embed code copied to clipboard!");
-    }).catch(() => {
-      // Fallback
-      const textArea = document.createElement("textarea");
-      textArea.value = iframeCode;
-      document.body.appendChild(textArea);
-      textArea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textArea);
-      alert("Embed code copied to clipboard!");
-    });
+
+    navigator.clipboard
+      .writeText(iframeCode)
+      .then(() => {
+        alert("Embed code copied to clipboard!");
+      })
+      .catch(() => {
+        // Fallback
+        const textArea = document.createElement("textarea");
+        textArea.value = iframeCode;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+        alert("Embed code copied to clipboard!");
+      });
   };
 
   return (
@@ -66,7 +75,10 @@ export default function TestFormEmbedPage() {
         </div>
 
         {/* Iframe */}
-        <div className="bg-white rounded-2xl shadow-2xl overflow-hidden" style={{ height: `${height}px` }}>
+        <div
+          className="bg-white rounded-2xl shadow-2xl overflow-hidden"
+          style={{ height: `${height}px` }}
+        >
           <iframe
             key={iframeKey}
             src={buildIframeUrl()}
@@ -98,9 +110,7 @@ export default function TestFormEmbedPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium mb-2">
-                Width
-              </label>
+              <label className="block text-sm font-medium mb-2">Width</label>
               <input
                 type="text"
                 value={width}
@@ -216,4 +226,3 @@ export default function TestFormEmbedPage() {
     </div>
   );
 }
-

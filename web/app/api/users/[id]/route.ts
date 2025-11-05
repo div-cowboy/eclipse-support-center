@@ -9,7 +9,7 @@ const INTERNAL_API_SECRET = process.env.INTERNAL_API_SECRET;
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Verify internal API secret
@@ -21,8 +21,8 @@ export async function GET(
       );
     }
 
-    const userId = params.id;
-
+    const { id } = await params;
+    const userId = id;
     // Fetch user from database
     const user = await prisma.user.findUnique({
       where: { id: userId },

@@ -3,14 +3,17 @@
 import { useState } from "react";
 import { UniversalChatInterface } from "@/components/chat/UniversalChatInterface";
 import type { ChatConfig } from "@/components/chat/UniversalChatInterface";
+import { useParams } from "next/navigation";
 
-export default function ChatPage({ params }: { params: { id: string } }) {
+export default function ChatPage() {
   const [chatId, setChatId] = useState<string | null>(null);
 
+  const { id } = useParams();
+  const chatbotId = id as string | undefined;
   const chatConfig: ChatConfig = {
-    apiEndpoint: `/api/chatbots/${params.id}/chat`,
+    apiEndpoint: `/api/chatbots/${id}/chat`,
     type: "chatbot",
-    chatbotId: params.id,
+    chatbotId: chatbotId || "",
     chatId: chatId || undefined,
     welcomeMessage: "Hi, how can I help you today?",
     placeholder: "Ask a question...",

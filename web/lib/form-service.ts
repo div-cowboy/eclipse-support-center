@@ -110,7 +110,8 @@ export interface ValidationResult {
  */
 function generateEmbedCode(): string {
   // Generate a random alphanumeric string (6-8 chars)
-  const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  const chars =
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   const length = 6 + Math.floor(Math.random() * 3); // 6-8 characters
   let code = "";
   for (let i = 0; i < length; i++) {
@@ -148,9 +149,7 @@ async function generateUniqueEmbedCode(): Promise<string> {
 /**
  * Create a new form
  */
-export async function createForm(
-  input: CreateFormInput
-): Promise<SupportForm> {
+export async function createForm(input: CreateFormInput): Promise<SupportForm> {
   // Generate unique embed code
   const embedCode = await generateUniqueEmbedCode();
 
@@ -201,9 +200,13 @@ export async function createForm(
 /**
  * Get a single form by ID
  */
-export async function getForm(
-  formId: string
-): Promise<(SupportForm & { organization: Organization; createdBy: User }) | null> {
+export async function getForm(formId: string): Promise<
+  | (SupportForm & {
+      organization: Organization;
+      createdBy: { id: string; name: string | null; email: string };
+    })
+  | null
+> {
   return prisma.supportForm.findUnique({
     where: { id: formId },
     include: {
@@ -243,7 +246,8 @@ export async function updateForm(
   const updateData: any = {};
 
   if (input.name !== undefined) updateData.name = input.name;
-  if (input.description !== undefined) updateData.description = input.description;
+  if (input.description !== undefined)
+    updateData.description = input.description;
   if (input.fields !== undefined) updateData.fields = input.fields as any;
   if (input.settings !== undefined) updateData.settings = input.settings as any;
   if (input.defaultValues !== undefined)
@@ -405,7 +409,10 @@ export function validateFormSubmission(
     const value = formData[field.name];
 
     // Check required fields
-    if (field.required && (value === undefined || value === null || value === "")) {
+    if (
+      field.required &&
+      (value === undefined || value === null || value === "")
+    ) {
       errors.push({
         field: field.name,
         message: `${field.label} is required`,
@@ -437,13 +444,19 @@ export function validateFormSubmission(
           message: `${field.label} must be a number`,
         });
       } else {
-        if (field.validation?.min !== undefined && numValue < field.validation.min) {
+        if (
+          field.validation?.min !== undefined &&
+          numValue < field.validation.min
+        ) {
           errors.push({
             field: field.name,
             message: `${field.label} must be at least ${field.validation.min}`,
           });
         }
-        if (field.validation?.max !== undefined && numValue > field.validation.max) {
+        if (
+          field.validation?.max !== undefined &&
+          numValue > field.validation.max
+        ) {
           errors.push({
             field: field.name,
             message: `${field.label} must be at most ${field.validation.max}`,
@@ -454,13 +467,19 @@ export function validateFormSubmission(
 
     if (field.type === "text" || field.type === "textarea") {
       const strValue = String(value);
-      if (field.validation?.minLength && strValue.length < field.validation.minLength) {
+      if (
+        field.validation?.minLength &&
+        strValue.length < field.validation.minLength
+      ) {
         errors.push({
           field: field.name,
           message: `${field.label} must be at least ${field.validation.minLength} characters`,
         });
       }
-      if (field.validation?.maxLength && strValue.length > field.validation.maxLength) {
+      if (
+        field.validation?.maxLength &&
+        strValue.length > field.validation.maxLength
+      ) {
         errors.push({
           field: field.name,
           message: `${field.label} must be at most ${field.validation.maxLength} characters`,
@@ -478,10 +497,7 @@ export function validateFormSubmission(
     }
 
     // Validate select/radio/checkbox options
-    if (
-      (field.type === "select" || field.type === "radio") &&
-      field.options
-    ) {
+    if ((field.type === "select" || field.type === "radio") && field.options) {
       const validValues = field.options.map((opt) => opt.value);
       if (!validValues.includes(value)) {
         errors.push({
@@ -512,4 +528,3 @@ export function validateFormSubmission(
     errors,
   };
 }
-

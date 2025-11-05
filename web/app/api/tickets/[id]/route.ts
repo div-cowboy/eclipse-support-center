@@ -15,7 +15,7 @@ import { TicketPriority, TicketStatus } from "@prisma/client";
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
@@ -23,8 +23,8 @@ export async function GET(
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-
-    const ticket = await getTicket(params.id);
+    const { id } = await params;
+    const ticket = await getTicket(id);
 
     if (!ticket) {
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 });
@@ -49,11 +49,11 @@ export async function GET(
  */
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await auth();
-
+    const { id } = await params;
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -79,7 +79,7 @@ export async function PATCH(
       );
     }
 
-    const ticket = await updateTicket(params.id, body, session.user.id);
+    const ticket = await updateTicket(id, body, session.user.id);
 
     return NextResponse.json({
       success: true,

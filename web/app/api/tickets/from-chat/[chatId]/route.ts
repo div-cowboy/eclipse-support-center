@@ -17,11 +17,11 @@ import { TicketPriority } from "@prisma/client";
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { chatId: string } }
+  { params }: { params: Promise<{ chatId: string }> }
 ) {
   try {
     const session = await auth();
-
+    const { chatId } = await params;
     if (!session?.user?.email) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
@@ -41,7 +41,7 @@ export async function POST(
 
     // Create ticket from chat
     const input: CreateTicketFromChatInput = {
-      chatId: params.chatId,
+      chatId: chatId,
       subject: body.subject,
       priority: body.priority,
       category: body.category,

@@ -10,10 +10,11 @@ import { Redis } from "@upstash/redis";
  */
 export async function POST(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const chatId = params.id;
+    const { id } = await params;
+    const chatId = id;
 
     // Get request body
     const body = await request.json();
