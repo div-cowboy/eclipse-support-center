@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chat Embed Example</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      width: 100%;
+    }
+
+    .header {
+      text-align: center;
+      color: white;
+      margin-bottom: 30px;
+    }
+
+    .header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      font-weight: 700;
+    }
+
+    .header p {
+      font-size: 1.1rem;
+      opacity: 0.9;
+    }
+
+    .chat-wrapper {
+      background: white;
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+      height: 600px;
+      max-width: 800px;
+      margin: 0 auto;
+    }
+
+    .chat-iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      display: block;
+    }
+
+    .controls {
+      background: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-top: 20px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      max-width: 800px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+
+    .controls h3 {
+      margin-bottom: 15px;
+      color: #333;
+    }
+
+    .control-group {
+      margin-bottom: 15px;
+    }
+
+    .control-group label {
+      display: block;
+      margin-bottom: 5px;
+      color: #555;
+      font-weight: 500;
+      font-size: 0.9rem;
+    }
+
+    .control-group input,
+    .control-group select {
+      width: 100%;
+      padding: 10px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 1rem;
+      transition: border-color 0.2s;
+    }
+
+    .control-group input:focus,
+    .control-group select:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .controls button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .controls button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .controls button:active {
+      transform: translateY(0);
+    }
+
+    @media (max-width: 768px) {
+      .header h1 {
+        font-size: 1.8rem;
+      }
+
+      .chat-wrapper {
+        height: 500px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🤖 Eclipse Chat Embed Demo</h1>
+      <p>Customize the chat appearance with the controls below</p>
+      <p style="margin-top: 10px; font-size: 0.95rem;">
+        💡 <strong>New:</strong> Multiple chats are automatically saved in your browser! 
+        Click "Chats" to view all your conversations.
+      </p>
+    </div>
+
+    <div class="chat-wrapper">
+      <iframe 
+        id="chat-iframe"
+        class="chat-iframe"
+        allow="clipboard-write"
+      ></iframe>
+    </div>
+
+    <div class="controls">
+      <h3>🎨 Customize Chat Appearance</h3>
+      
+      <div class="control-group">
+        <label for="chatbotId">Chatbot ID (required)</label>
+        <input 
+          type="text" 
+          id="chatbotId" 
+          placeholder="Enter your chatbot ID"
+        >
+      </div>
+
+      <div class="control-group">
+        <label for="primaryColor">Primary Color</label>
+        <input 
+          type="color" 
+          id="primaryColor" 
+          value="#667eea"
+        >
+      </div>
+
+      <div class="control-group">
+        <label for="theme">Theme</label>
+        <select id="theme">
+          <option value="auto">Auto</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="widgetMode">Widget Mode</label>
+        <select id="widgetMode">
+          <option value="inline">Inline (embedded in page)</option>
+          <option value="icon">Floating Icon (Intercom-style)</option>
+          <option value="popup">Floating Popup with Text</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="fontFamily">Font Family</label>
+        <input 
+          type="text" 
+          id="fontFamily" 
+          placeholder="e.g., Inter, Arial, sans-serif"
+          value="system-ui, -apple-system, sans-serif"
+        >
+      </div>
+
+      <div class="control-group">
+        <label for="welcomeMessage">Welcome Message</label>
+        <input 
+          type="text" 
+          id="welcomeMessage" 
+          placeholder="e.g., Hi! How can I help you?"
+        >
+      </div>
+
+      <div class="control-group">
+        <label for="placeholder">Input Placeholder</label>
+        <input 
+          type="text" 
+          id="placeholder" 
+          placeholder="e.g., Type your message..."
+          value="Type your message..."
+        >
+      </div>
+
+      <button onclick="updateIframe()">
+        🚀 Update Chat
+      </button>
+    </div>
+  </div>
+
+  <script src="/eclipse-chat-widget.js"></script>
+  <script>
+    // Get base URL (works in both dev and production)
+    // For testing, if opened as file://, use localhost
+    const baseURL = window.location.protocol === 'file:' 
+      ? 'http://localhost:3000' 
+      : window.location.origin;
+    
+    console.log('🌐 Base URL:', baseURL);
+    console.log('🔗 Current origin:', window.location.origin);
+
+    let currentWidget = null;
+
+    function updateIframe() {
+      const chatbotId = document.getElementById('chatbotId').value;
+      
+      if (!chatbotId) {
+        alert('Please enter a Chatbot ID');
+        return;
+      }
+
+      const widgetMode = document.getElementById('widgetMode').value;
+      const chatWrapper = document.getElementById('chat-iframe').parentElement;
+
+      // Destroy existing widget if any
+      if (currentWidget) {
+        currentWidget.destroy();
+        currentWidget = null;
+      }
+
+      if (widgetMode === 'inline') {
+        // Show inline iframe
+        chatWrapper.style.display = 'block';
+        
+        const config = {
+          chatbotId: chatbotId,
+          theme: document.getElementById('theme').value,
+          primaryColor: document.getElementById('primaryColor').value,
+          fontFamily: document.getElementById('fontFamily').value,
+          welcomeMessage: document.getElementById('welcomeMessage').value,
+          placeholder: document.getElementById('placeholder').value,
+          // Custom CSS for styling
+          customCSS: encodeURIComponent(`
+            .bg-primary {
+              background: linear-gradient(135deg, ${document.getElementById('primaryColor').value} 0%, ${document.getElementById('primaryColor').value}dd 100%);
+            }
+            .border-b {
+              border-color: ${document.getElementById('primaryColor').value}33 !important;
+            }
+          `)
+        };
+
+        // Build URL
+        const params = new URLSearchParams();
+        Object.entries(config).forEach(([key, value]) => {
+          if (value) params.append(key, value);
+        });
+
+        const iframeURL = `${baseURL}/embed/chat?${params.toString()}`;
+        
+        // Update iframe
+        document.getElementById('chat-iframe').src = iframeURL;
+        
+        console.log('Updated iframe URL:', iframeURL);
+      } else {
+        // Hide inline iframe and create floating widget
+        chatWrapper.style.display = 'none';
+
+        const widgetConfig = {
+          mode: widgetMode, // 'icon' or 'popup'
+          chatbotId: chatbotId,
+          theme: document.getElementById('theme').value,
+          primaryColor: document.getElementById('primaryColor').value,
+          welcomeMessage: document.getElementById('welcomeMessage').value,
+          placeholder: document.getElementById('placeholder').value,
+          position: 'bottom-right',
+          height: '600px',
+          width: '400px',
+          borderRadius: '16px',
+          iconSize: '60px',
+          buttonText: 'Chat with us'
+        };
+
+        currentWidget = new EclipseChatWidget(widgetConfig, baseURL);
+        console.log('Created floating widget in mode:', widgetMode);
+      }
+    }
+
+    // Auto-load if chatbot ID is in URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const urlChatbotId = urlParams.get('chatbotId');
+    if (urlChatbotId) {
+      document.getElementById('chatbotId').value = urlChatbotId;
+      updateIframe();
+    }
+  </script>
+</body>
+</html>
+

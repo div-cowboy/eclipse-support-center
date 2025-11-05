@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Intercom-Style Icon Mode Demo</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+        sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      padding: 40px 20px;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .hero {
+      text-align: center;
+      color: white;
+      margin-bottom: 60px;
+    }
+
+    .hero h1 {
+      font-size: 3rem;
+      margin-bottom: 20px;
+      font-weight: 700;
+    }
+
+    .hero p {
+      font-size: 1.3rem;
+      opacity: 0.9;
+      line-height: 1.6;
+    }
+
+    .demo-section {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      margin-bottom: 30px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    .demo-section h2 {
+      font-size: 2rem;
+      margin-bottom: 20px;
+      color: #333;
+    }
+
+    .demo-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 30px;
+      margin-top: 30px;
+    }
+
+    .demo-card {
+      background: #f8f9fa;
+      border-radius: 12px;
+      padding: 25px;
+      border: 2px solid #e0e0e0;
+      transition: all 0.3s ease;
+    }
+
+    .demo-card:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    }
+
+    .demo-card h3 {
+      font-size: 1.5rem;
+      margin-bottom: 15px;
+      color: #667eea;
+    }
+
+    .demo-card p {
+      color: #666;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .demo-card button {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      width: 100%;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .demo-card button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .code-section {
+      background: #1e1e1e;
+      border-radius: 12px;
+      padding: 25px;
+      margin-top: 30px;
+      overflow-x: auto;
+    }
+
+    .code-section pre {
+      color: #d4d4d4;
+      font-family: 'Courier New', monospace;
+      font-size: 0.9rem;
+      line-height: 1.6;
+    }
+
+    .code-section .comment {
+      color: #6a9955;
+    }
+
+    .code-section .tag {
+      color: #569cd6;
+    }
+
+    .code-section .attr {
+      color: #9cdcfe;
+    }
+
+    .code-section .value {
+      color: #ce9178;
+    }
+
+    .features-list {
+      list-style: none;
+      margin-top: 20px;
+    }
+
+    .features-list li {
+      padding: 10px 0;
+      color: #555;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .features-list li:before {
+      content: "✓";
+      color: #667eea;
+      font-weight: bold;
+      font-size: 1.2rem;
+    }
+
+    @media (max-width: 768px) {
+      .hero h1 {
+        font-size: 2rem;
+      }
+
+      .demo-section {
+        padding: 25px;
+      }
+
+      .demo-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="hero">
+      <h1>🚀 Intercom-Style Chat Widget</h1>
+      <p>Experience the power of a modern, animated chat interface</p>
+      <p style="margin-top: 10px; font-size: 1rem;">
+        Look at the bottom-right corner! 👇
+      </p>
+    </div>
+
+    <div class="demo-section">
+      <h2>🎨 Features</h2>
+      <ul class="features-list">
+        <li>Smooth, performant animations using CSS transforms and cubic-bezier easing</li>
+        <li>Intercom-style floating icon that expands into a chat window</li>
+        <li>Beautiful scale and slide animations</li>
+        <li>Close button with backdrop blur effect</li>
+        <li>Hover effects with smooth transitions</li>
+        <li>GPU-accelerated animations for optimal performance</li>
+        <li>Fully customizable colors, sizes, and positioning</li>
+        <li>Responsive and mobile-friendly</li>
+      </ul>
+    </div>
+
+    <div class="demo-section">
+      <h2>💡 Try Different Modes</h2>
+      <div class="demo-grid">
+        <div class="demo-card">
+          <h3>Icon Mode (Current)</h3>
+          <p>The floating icon you see in the bottom-right corner. Click it to see the smooth animation!</p>
+          <button onclick="switchToIconMode()">Reload Icon Mode</button>
+        </div>
+
+        <div class="demo-card">
+          <h3>Popup Mode</h3>
+          <p>Traditional button with text that expands into a chat window.</p>
+          <button onclick="switchToPopupMode()">Switch to Popup Mode</button>
+        </div>
+
+        <div class="demo-card">
+          <h3>Custom Colors</h3>
+          <p>Try a different color scheme with a larger icon.</p>
+          <button onclick="switchToCustomColors()">Try Custom Theme</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-section">
+      <h2>📝 Implementation Code</h2>
+      <div class="code-section">
+        <pre><span class="comment"><!-- Icon Mode (Intercom-style) --></span>
+<span class="tag">&lt;script </span><span class="attr">src</span>=<span class="value">"/eclipse-chat-widget.js"</span>
+        <span class="attr">data-eclipse-chat</span>
+        <span class="attr">data-mode</span>=<span class="value">"icon"</span>
+        <span class="attr">data-chatbot-id</span>=<span class="value">"your-chatbot-id"</span>
+        <span class="attr">data-primary-color</span>=<span class="value">"#3b82f6"</span>
+        <span class="attr">data-icon-size</span>=<span class="value">"60px"</span>
+        <span class="attr">data-position</span>=<span class="value">"bottom-right"</span>
+        <span class="attr">data-height</span>=<span class="value">"600px"</span>
+        <span class="attr">data-width</span>=<span class="value">"400px"</span><span class="tag">&gt;&lt;/script&gt;</span>
+
+<span class="comment"><!-- Or use JavaScript API --></span>
+<span class="tag">&lt;script </span><span class="attr">src</span>=<span class="value">"/eclipse-chat-widget.js"</span><span class="tag">&gt;&lt;/script&gt;</span>
+<span class="tag">&lt;script&gt;</span>
+  <span class="attr">const</span> widget = <span class="attr">new</span> EclipseChatWidget({
+    mode: <span class="value">'icon'</span>,
+    chatbotId: <span class="value">'your-chatbot-id'</span>,
+    primaryColor: <span class="value">'#3b82f6'</span>,
+    iconSize: <span class="value">'60px'</span>,
+    position: <span class="value">'bottom-right'</span>,
+    height: <span class="value">'600px'</span>,
+    width: <span class="value">'400px'</span>
+  });
+<span class="tag">&lt;/script&gt;</span></pre>
+      </div>
+    </div>
+
+    <div class="demo-section">
+      <h2>⚙️ Configuration Options</h2>
+      <div style="overflow-x: auto;">
+        <table style="width: 100%; border-collapse: collapse; margin-top: 20px;">
+          <thead>
+            <tr style="background: #f8f9fa; border-bottom: 2px solid #e0e0e0;">
+              <th style="padding: 12px; text-align: left;">Option</th>
+              <th style="padding: 12px; text-align: left;">Type</th>
+              <th style="padding: 12px; text-align: left;">Default</th>
+              <th style="padding: 12px; text-align: left;">Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr style="border-bottom: 1px solid #e0e0e0;">
+              <td style="padding: 12px;"><code>mode</code></td>
+              <td style="padding: 12px;">"icon" | "popup"</td>
+              <td style="padding: 12px;">"popup"</td>
+              <td style="padding: 12px;">Display mode for the widget</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #e0e0e0;">
+              <td style="padding: 12px;"><code>iconSize</code></td>
+              <td style="padding: 12px;">string</td>
+              <td style="padding: 12px;">"60px"</td>
+              <td style="padding: 12px;">Size of the icon in icon mode</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #e0e0e0;">
+              <td style="padding: 12px;"><code>position</code></td>
+              <td style="padding: 12px;">string</td>
+              <td style="padding: 12px;">"bottom-right"</td>
+              <td style="padding: 12px;">Position on screen (bottom-right, bottom-left, etc.)</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #e0e0e0;">
+              <td style="padding: 12px;"><code>primaryColor</code></td>
+              <td style="padding: 12px;">string</td>
+              <td style="padding: 12px;">"#3b82f6"</td>
+              <td style="padding: 12px;">Primary color for buttons and accents</td>
+            </tr>
+            <tr style="border-bottom: 1px solid #e0e0e0;">
+              <td style="padding: 12px;"><code>offset</code></td>
+              <td style="padding: 12px;">object</td>
+              <td style="padding: 12px;">{}</td>
+              <td style="padding: 12px;">Custom positioning offset (e.g., {bottom: "30px"})</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Eclipse Chat Widget - Icon Mode -->
+  <script src="/eclipse-chat-widget.js"></script>
+  <script>
+    // Get base URL
+    const baseURL = window.location.protocol === 'file:' 
+      ? 'http://localhost:3000' 
+      : window.location.origin;
+
+    // Initialize widget in icon mode
+    let widget = new EclipseChatWidget({
+      mode: 'icon',
+      chatbotId: 'cmgzje3c4000am64yeow24kpi', // Replace with your actual chatbot ID
+      primaryColor: '#3b82f6',
+      iconSize: '60px',
+      position: 'bottom-right',
+      height: '600px',
+      width: '400px',
+      borderRadius: '16px',
+      welcomeMessage: '👋 Hi! How can we help you today?',
+      placeholder: 'Type your message...'
+    }, baseURL);
+
+    // Demo functions to switch modes
+    function switchToIconMode() {
+      if (widget) widget.destroy();
+      widget = new EclipseChatWidget({
+        mode: 'icon',
+        chatbotId: 'cmgzje3c4000am64yeow24kpi',
+        primaryColor: '#3b82f6',
+        iconSize: '60px',
+        position: 'bottom-right',
+        height: '600px',
+        width: '400px',
+        borderRadius: '16px',
+      }, baseURL);
+    }
+
+    function switchToPopupMode() {
+      if (widget) widget.destroy();
+      widget = new EclipseChatWidget({
+        mode: 'popup',
+        chatbotId: 'test-chatbot-id',
+        primaryColor: '#3b82f6',
+        position: 'bottom-right',
+        height: '600px',
+        width: '400px',
+        buttonText: 'Chat with us',
+        borderRadius: '16px',
+      }, baseURL);
+    }
+
+    function switchToCustomColors() {
+      if (widget) widget.destroy();
+      widget = new EclipseChatWidget({
+        mode: 'icon',
+        chatbotId: 'test-chatbot-id',
+        primaryColor: '#10b981', // Emerald green
+        iconSize: '70px',
+        position: 'bottom-right',
+        height: '650px',
+        width: '420px',
+        borderRadius: '20px',
+      }, baseURL);
+    }
+  </script>
+</body>
+</html>
+
