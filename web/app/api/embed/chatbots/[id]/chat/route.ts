@@ -185,7 +185,8 @@ export async function POST(
       });
     } catch (error) {
       console.error("Error generating chatbot response:", error);
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
       const errorStack = error instanceof Error ? error.stack : undefined;
       console.error("Error details:", {
         message: errorMessage,
@@ -196,7 +197,8 @@ export async function POST(
       return NextResponse.json(
         {
           error: "Failed to generate response",
-          details: process.env.NODE_ENV === "development" ? errorMessage : undefined,
+          details:
+            process.env.NODE_ENV === "development" ? errorMessage : undefined,
         },
         { status: 500 }
       );
@@ -208,12 +210,12 @@ export async function POST(
     console.error("Error details:", {
       message: errorMessage,
       stack: errorStack,
-      chatbotId: id,
     });
     return NextResponse.json(
       {
         error: "Internal server error",
-        details: process.env.NODE_ENV === "development" ? errorMessage : undefined,
+        details:
+          process.env.NODE_ENV === "development" ? errorMessage : undefined,
       },
       { status: 500 }
     );
