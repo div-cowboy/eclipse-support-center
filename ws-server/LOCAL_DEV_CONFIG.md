@@ -1,47 +1,48 @@
 # 🚀 Local Development Configuration
 
-## Generated Secrets (Use These!)
+## Quick Start
 
-I've generated secure secrets for you:
+The easiest way to set up your development environment is to use the setup script:
 
-### JWT_SECRET (for both apps)
-
-```
-6f52209920346cecd52e3c04a9bd89f61b36bfeca98c5e1ef39e1f72c655c847
+```bash
+./scripts/setup-dev-env.sh
 ```
 
-### INTERNAL_API_SECRET (for both apps)
-
-```
-42aec25f537b789468b932f13f693f6ea28112add82df9ee31b9e86781dd4b3b
-```
+This script will:
+- Copy `.env.example` files if `.env` doesn't exist
+- Generate secure secrets if needed
+- Validate your environment setup
 
 ---
 
-## Step 1: Configure WebSocket Server
+## Manual Setup
 
-Edit `ws-server/.env` and add:
+### Step 1: Configure WebSocket Server
 
-```env
-# Server Configuration
-PORT=8080
-NODE_ENV=development
+1. Copy the example file:
+   ```bash
+   cp ws-server/.env.example ws-server/.env
+   ```
 
-# JWT Configuration
-JWT_SECRET=6f52209920346cecd52e3c04a9bd89f61b36bfeca98c5e1ef39e1f72c655c847
+2. Edit `ws-server/.env` and fill in your values:
+   - **JWT_SECRET**: Generate with `openssl rand -hex 32`
+   - **INTERNAL_API_SECRET**: Generate with `openssl rand -hex 32`
+   - **REDIS_URL**: Get from Upstash dashboard (Redis tab)
+   - **NEXT_API_URL**: `http://localhost:3000` for local development
 
-# Upstash Redis Configuration
-# 👉 YOU NEED TO ADD YOUR UPSTASH CREDENTIALS HERE:
-UPSTASH_REDIS_REST_URL=https://your-redis-name.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your_upstash_token_here
+### Step 2: Configure Next.js App
 
-# Next.js API Configuration
-NEXT_API_URL=http://localhost:3000
-INTERNAL_API_SECRET=42aec25f537b789468b932f13f693f6ea28112add82df9ee31b9e86781dd4b3b
+1. Copy the example file:
+   ```bash
+   cp web/.env.local.example web/.env.local
+   ```
 
-# Logging
-LOG_LEVEL=debug
-```
+2. Edit `web/.env.local` and fill in your values:
+   - **JWT_SECRET**: Must match the value in `ws-server/.env`
+   - **INTERNAL_API_SECRET**: Must match the value in `ws-server/.env`
+   - **NEXT_PUBLIC_WS_URL**: `ws://localhost:8080` for local development
+   - **UPSTASH_REDIS_REST_URL** and **UPSTASH_REDIS_REST_TOKEN**: Get from Upstash dashboard (REST API tab)
+   - **DATABASE_URL**: Your Prisma database connection string
 
 ### How to get Upstash credentials:
 
@@ -50,23 +51,8 @@ LOG_LEVEL=debug
 3. Click "Create Database"
 4. Name it "eclipse-chat-dev"
 5. Select your region
-6. Click "REST API" tab
-7. Copy the URL and Token to the .env file above
-
----
-
-## Step 2: Configure Next.js App
-
-Add these to your main `.env.local` file:
-
-```env
-# WebSocket Server Configuration
-NEXT_PUBLIC_WS_URL=ws://localhost:8080
-
-# Shared Secrets (must match ws-server/.env)
-JWT_SECRET=6f52209920346cecd52e3c04a9bd89f61b36bfeca98c5e1ef39e1f72c655c847
-INTERNAL_API_SECRET=42aec25f537b789468b932f13f693f6ea28112add82df9ee31b9e86781dd4b3b
-```
+6. For **REDIS_URL** (WebSocket server): Click "Redis" tab, copy the connection string
+7. For **UPSTASH_REDIS_REST_URL** and **UPSTASH_REDIS_REST_TOKEN** (Next.js app): Click "REST API" tab, copy the URL and Token
 
 ---
 

@@ -31,13 +31,74 @@ import {
 // Load environment variables
 dotenv.config();
 
-// Validate required environment variables
-const requiredEnvVars = ["JWT_SECRET", "REDIS_URL", "INTERNAL_API_SECRET"];
+// Validate required environment variables with helpful error messages
+const requiredEnvVars = [
+  {
+    name: "JWT_SECRET",
+    description:
+      "JWT secret for WebSocket authentication (must match Next.js app)",
+  },
+  {
+    name: "REDIS_URL",
+    description: "Redis connection URL (TCP connection from Upstash)",
+  },
+  {
+    name: "INTERNAL_API_SECRET",
+    description:
+      "Internal API secret for Next.js API authentication (must match Next.js app)",
+  },
+];
 
+const missingVars: string[] = [];
 for (const envVar of requiredEnvVars) {
-  if (!process.env[envVar]) {
-    logger.error(`Missing required environment variable: ${envVar}`);
-    process.exit(1);
+  if (!process.env[envVar.name]) {
+    missingVars.push(envVar.name);
+    logger.error(
+      `Missing required environment variable: ${envVar.name}\n` +
+        `  Description: ${envVar.description}\n` +
+        `  → Add this to your ws-server/.env file\n` +
+        `  → See ws-server/.env.example for reference`
+    );
+  }
+}
+
+if (missingVars.length > 0) {
+  logger.error(
+    `\n❌ Missing ${missingVars.length} required environment variable(s)\n` +
+      `  Please configure your ws-server/.env file before starting the server.\n` +
+      `  Copy ws-server/.env.example to ws-server/.env and fill in your values.`
+  );
+  process.exit(1);
+}
+
+// Validate placeholder values
+if (process.env.JWT_SECRET === "your-jwt-secret-here") {
+  logger.error(
+    `JWT_SECRET is set to placeholder value\n` +
+      `  → Generate a secure secret: openssl rand -hex 32\n` +
+      `  → Update ws-server/.env with the generated value`
+  );
+  process.exit(1);
+}
+
+if (process.env.INTERNAL_API_SECRET === "your-internal-api-secret-here") {
+  logger.error(
+    `INTERNAL_API_SECRET is set to placeholder value\n` +
+      `  → Generate a secure secret: openssl rand -hex 32\n` +
+      `  → Update ws-server/.env with the generated value`
+  );
+  process.exit(1);
+}
+
+// Validate NEXT_API_URL format
+const nextApiUrl = process.env.NEXT_API_URL;
+if (nextApiUrl) {
+  if (!nextApiUrl.startsWith("http://") && !nextApiUrl.startsWith("https://")) {
+    logger.warn(
+      `NEXT_API_URL format may be incorrect: ${nextApiUrl}\n` +
+        `  → Should start with http:// or https://\n` +
+        `  → Example: http://localhost:3000 (local) or https://your-domain.vercel.app (production)`
+    );
   }
 }
 

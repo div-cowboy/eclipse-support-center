@@ -15,7 +15,13 @@ export function initRedis(): Redis {
   const redisUrl = process.env.REDIS_URL;
 
   if (!redisUrl) {
-    throw new Error("REDIS_URL must be set");
+    throw new Error(
+      "REDIS_URL environment variable is required\n" +
+      "  → Add REDIS_URL to your ws-server/.env file\n" +
+      "  → See ws-server/.env.example for reference\n" +
+      "  → Get Redis URL from Upstash dashboard under 'Redis' tab\n" +
+      "  → Format: redis://default:<password>@<host>:<port>"
+    );
   }
 
   redisClient = new Redis(redisUrl, {
@@ -83,7 +89,12 @@ export function subscribeToChannel(
   if (!redisSubscriber) {
     const redisUrl = process.env.REDIS_URL;
     if (!redisUrl) {
-      throw new Error("REDIS_URL must be set");
+      throw new Error(
+        "REDIS_URL environment variable is required\n" +
+        "  → Add REDIS_URL to your ws-server/.env file\n" +
+        "  → See ws-server/.env.example for reference\n" +
+        "  → Get Redis URL from Upstash dashboard under 'Redis' tab"
+      );
     }
 
     redisSubscriber = new Redis(redisUrl, {
