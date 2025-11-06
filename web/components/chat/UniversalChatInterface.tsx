@@ -124,6 +124,9 @@ interface UniversalChatInterfaceProps {
   config: ChatConfig;
 }
 
+const BASE_URL = "https://eclipse-support-center-git-main-wmg.vercel.app";
+// const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
+
 export function UniversalChatInterface({
   config,
 }: UniversalChatInterfaceProps) {
@@ -347,7 +350,7 @@ export function UniversalChatInterface({
             config.type === "embed"
               ? `/api/embed/chatbots/${config.chatbotId}`
               : `/api/chatbots/${config.chatbotId}`;
-          const response = await fetch(endpoint);
+          const response = await fetch(`${BASE_URL}${endpoint}`);
           if (response.ok) {
             const data = await response.json();
             setChatInfo(data);
@@ -358,7 +361,7 @@ export function UniversalChatInterface({
             setIsLoadingHistory(true); // Start loading
             try {
               const chatResponse = await fetch(
-                `/api/embed/chats/${config.chatId}`
+                `${BASE_URL}/api/embed/chats/${config.chatId}`
               );
               if (chatResponse.ok) {
                 const chatData = await chatResponse.json();
@@ -403,7 +406,9 @@ export function UniversalChatInterface({
       } else if (config.type === "traditional" && config.chatId) {
         setIsLoadingHistory(true); // Start loading
         try {
-          const response = await fetch(`/api/chats/${config.chatId}`);
+          const response = await fetch(
+            `${BASE_URL}/api/chats/${config.chatId}`
+          );
           if (response.ok) {
             const data = await response.json();
             setChatInfo(data);
@@ -536,7 +541,7 @@ export function UniversalChatInterface({
           try {
             // Save message to database without triggering AI
             const response = await fetch(
-              `/api/embed/chatbots/${config.chatbotId}/save-message`,
+              `${BASE_URL}/api/embed/chatbots/${config.chatbotId}/save-message`,
               {
                 method: "POST",
                 headers: {
@@ -767,7 +772,7 @@ export function UniversalChatInterface({
         type: config.type,
       });
 
-      const response = await fetch(config.apiEndpoint, {
+      const response = await fetch(`${BASE_URL}${config.apiEndpoint}`, {
         method: config.apiMethod || "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1067,7 +1072,7 @@ export function UniversalChatInterface({
 
     try {
       // Call escalation API to mark chat as escalated
-      const escalationResponse = await fetch("/api/escalations", {
+      const escalationResponse = await fetch(`${BASE_URL}/api/escalations`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1138,7 +1143,7 @@ export function UniversalChatInterface({
     setIsSavingEdit(true);
     try {
       const response = await fetch(
-        `/api/chats/${config.chatId}/messages/${editingMessageId}`,
+        `${BASE_URL}/api/chats/${config.chatId}/messages/${editingMessageId}`,
         {
           method: "PUT",
           headers: {

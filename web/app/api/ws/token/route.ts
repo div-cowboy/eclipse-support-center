@@ -6,7 +6,20 @@ const JWT_SECRET = process.env.JWT_SECRET || "";
 
 if (!JWT_SECRET) {
   throw new Error(
-    "JWT_SECRET environment variable is required for WebSocket authentication"
+    "JWT_SECRET environment variable is required for WebSocket authentication\n" +
+    "  → Add JWT_SECRET to your .env.local file\n" +
+    "  → See .env.local.example for reference\n" +
+    "  → Generate a secure secret: openssl rand -hex 32\n" +
+    "  → This value MUST match the JWT_SECRET in your WebSocket server (.env)"
+  );
+}
+
+if (JWT_SECRET === "your-jwt-secret-here") {
+  throw new Error(
+    "JWT_SECRET is set to placeholder value\n" +
+    "  → Generate a secure secret: openssl rand -hex 32\n" +
+    "  → Update .env.local with the generated value\n" +
+    "  → This value MUST match the JWT_SECRET in your WebSocket server (.env)"
   );
 }
 
@@ -47,6 +60,15 @@ export async function GET(request: NextRequest) {
     );
 
     const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
+
+    // Validate WebSocket URL format
+    if (!wsUrl.startsWith("ws://") && !wsUrl.startsWith("wss://")) {
+      console.warn(
+        `NEXT_PUBLIC_WS_URL format may be incorrect: ${wsUrl}\n` +
+        `  → Use ws://localhost:8080 for local development\n` +
+        `  → Use wss://your-server.fly.dev for production`
+      );
+    }
 
     return NextResponse.json({
       token,
