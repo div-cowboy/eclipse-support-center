@@ -38,7 +38,9 @@ UPSTASH_REDIS_REST_TOKEN=your-upstash-redis-token
 NEXT_PUBLIC_APP_URL=https://your-vercel-domain.vercel.app
 
 # Database (if using Supabase)
-DATABASE_URL=your-production-database-url
+# IMPORTANT: Use connection pooling URL (port 6543) for serverless/Vercel
+# Format: postgresql://postgres:password@db.project.supabase.co:6543/postgres?pgbouncer=true
+DATABASE_URL=postgresql://postgres:password@db.project.supabase.co:6543/postgres?pgbouncer=true
 SUPABASE_URL=your-supabase-url
 SUPABASE_ANON_KEY=your-supabase-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
@@ -186,6 +188,58 @@ Should return:
 4. **Check Logs**: 
    - Vercel: Check function logs in dashboard
    - Fly.io: `fly logs`
+
+### Database Connection Errors ("Can't reach database server")
+
+**Problem**: Prisma can't connect to Supabase database from Vercel.
+
+**Important**: pgBouncer is enabled on Supabase's side, not Vercel. Vercel just needs the correct connection string.
+
+**Common Causes & Solutions**:
+
+1. **IP Allowlisting (Most Common)**
+   - Go to Supabase Dashboard → Settings → Database
+   - Check "Connection Pooling" section
+   - Ensure "Allow connections from anywhere" is enabled, OR
+   - Add Vercel's IP ranges to allowed IPs
+   - Vercel uses dynamic IPs, so allowlisting specific IPs won't work - use "Allow from anywhere" for connection pooling
+
+2. **Connection String Format in Vercel**
+   - Go to Vercel Dashboard → Project → Settings → Environment Variables
+   - Verify `DATABASE_URL` uses connection pooling URL:
+     ```
+     postgresql://postgres:password@db.project.supabase.co:6543/postgres?pgbouncer=true
+     ```
+   - Port `6543` with `pgbouncer=true` is required for serverless/Vercel
+   - Port `5432` is for direct connections (migrations only, not for Vercel)
+   - Ensure it's set for "Production" environment (not just Preview)
+   - Check for extra spaces, quotes, or line breaks
+
+3. **Supabase Project Status**
+   - Check Supabase Dashboard → Project Settings
+   - Ensure project is not paused
+   - Free tier projects pause after 1 week of inactivity
+   - Resume project if paused
+
+4. **Connection String in Vercel**
+   - Go to Vercel Dashboard → Project → Settings → Environment Variables
+   - Verify `DATABASE_URL` is set correctly
+   - Check for extra spaces or quotes
+   - Ensure it's set for "Production" environment (not just Preview)
+
+5. **Test Connection**
+   ```bash
+   # Test from local machine (should work)
+   psql "postgresql://postgres:password@db.project.supabase.co:6543/postgres?pgbouncer=true"
+   
+   # If local works but Vercel doesn't, it's likely IP allowlisting
+   ```
+
+**Quick Fix**:
+1. Supabase Dashboard → Settings → Database
+2. Connection Pooling → Ensure "Allow connections from anywhere" is enabled
+3. Save and wait 1-2 minutes for changes to propagate
+4. Redeploy on Vercel
 
 ## 🔄 Local Development
 

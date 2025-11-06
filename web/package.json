@@ -18,8 +18,8 @@
     "test:foray-golf": "dotenv -e .env -- tsx scripts/test-foray-golf.ts",
     "debug:org-search": "dotenv -e .env -- tsx scripts/debug-org-search.ts",
     "update:chatbot-config": "dotenv -e .env -- tsx scripts/update-chatbot-config.ts",
-    "index:org-descriptions": "dotenv -e .env -- tsx scripts/index-existing-org-descriptions.ts"
-
+    "index:org-descriptions": "dotenv -e .env -- tsx scripts/index-existing-org-descriptions.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.0",
