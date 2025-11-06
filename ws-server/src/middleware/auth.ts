@@ -1,11 +1,11 @@
-import * as jwt from 'jsonwebtoken';
-import { JWTPayload } from '../types';
-import { logger } from '../utils/logger';
+import * as jwt from "jsonwebtoken";
+import { JWTPayload } from "../types";
+import { logger } from "../utils/logger";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
-  throw new Error('JWT_SECRET environment variable is required');
+  throw new Error("JWT_SECRET environment variable is required");
 }
 
 /**
@@ -13,18 +13,18 @@ if (!JWT_SECRET) {
  */
 export function verifyToken(token: string): JWTPayload {
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload;
-    
+    const decoded = jwt.verify(token, JWT_SECRET as string) as JWTPayload;
+
     if (!decoded.userId || !decoded.chatId) {
-      throw new Error('Invalid token payload: missing userId or chatId');
+      throw new Error("Invalid token payload: missing userId or chatId");
     }
-    
+
     return decoded;
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {
-      throw new Error('Token expired');
+      throw new Error("Token expired");
     } else if (error instanceof jwt.JsonWebTokenError) {
-      throw new Error('Invalid token');
+      throw new Error("Invalid token");
     }
     throw error;
   }
@@ -35,10 +35,10 @@ export function verifyToken(token: string): JWTPayload {
  */
 export function extractToken(url: string): string | null {
   try {
-    const urlObj = new URL(url, 'http://localhost');
-    return urlObj.searchParams.get('token');
+    const urlObj = new URL(url, "http://localhost");
+    return urlObj.searchParams.get("token");
   } catch (error) {
-    logger.error('Failed to extract token from URL', error);
+    logger.error("Failed to extract token from URL", error);
     return null;
   }
 }
@@ -46,14 +46,15 @@ export function extractToken(url: string): string | null {
 /**
  * Validate internal API request
  */
-export function validateInternalRequest(authHeader: string | undefined): boolean {
+export function validateInternalRequest(
+  authHeader: string | undefined
+): boolean {
   const expectedSecret = process.env.INTERNAL_API_SECRET;
-  
+
   if (!expectedSecret) {
-    logger.warn('INTERNAL_API_SECRET not set, internal requests will fail');
+    logger.warn("INTERNAL_API_SECRET not set, internal requests will fail");
     return false;
   }
-  
+
   return authHeader === `Bearer ${expectedSecret}`;
 }
-

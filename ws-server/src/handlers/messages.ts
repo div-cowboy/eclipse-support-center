@@ -57,7 +57,7 @@ export async function handleChatMessage(
       throw new Error(`API error: ${response.status} - ${errorText}`);
     }
 
-    const result = await response.json();
+    const result = (await response.json()) as { message: SavedMessage };
     const savedMessage: SavedMessage = result.message;
 
     // Prepare broadcast payload
@@ -169,7 +169,7 @@ export async function handleAgentJoined(
       return;
     }
 
-    const userData = await response.json();
+    const userData = (await response.json()) as { name: string; email: string };
     const agentName = userData.name || userData.email || "Agent";
 
     const payload = {
