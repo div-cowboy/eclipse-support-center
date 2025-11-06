@@ -555,7 +555,54 @@ export function UniversalChatInterface({
             );
 
             if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
+              // Try to get error details from response body
+              // Clone response first so we can read it without consuming the original
+              const responseClone = response.clone();
+              let errorDetails = `HTTP error! status: ${response.status}`;
+              try {
+                const errorBody = await responseClone.json();
+                errorDetails = errorBody.error || errorDetails;
+                if (errorBody.details) {
+                  errorDetails += ` - ${errorBody.details}`;
+                }
+                console.error(
+                  "[UniversalChatInterface] Save Message API Error:",
+                  {
+                    status: response.status,
+                    statusText: response.statusText,
+                    error: errorBody,
+                    endpoint: `/api/embed/chatbots/${config.chatbotId}/save-message`,
+                    requestBody: {
+                      message: messageToSave,
+                      chatId: config.chatId || null,
+                    },
+                  }
+                );
+              } catch (parseError) {
+                // If we can't parse as JSON, try to read as text
+                try {
+                  const responseText = await responseClone.text();
+                  console.error(
+                    "[UniversalChatInterface] Save Message API Error (unparseable):",
+                    {
+                      status: response.status,
+                      statusText: response.statusText,
+                      responseText: responseText.substring(0, 500),
+                    }
+                  );
+                } catch (textError) {
+                  console.error(
+                    "[UniversalChatInterface] Save Message API Error (unreadable):",
+                    {
+                      status: response.status,
+                      statusText: response.statusText,
+                      parseError,
+                      textError,
+                    }
+                  );
+                }
+              }
+              throw new Error(errorDetails);
             }
 
             const data = await response.json();
@@ -781,7 +828,48 @@ export function UniversalChatInterface({
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        // Try to get error details from response body
+        // Clone response first so we can read it without consuming the original
+        const responseClone = response.clone();
+        let errorDetails = `HTTP error! status: ${response.status}`;
+        try {
+          const errorBody = await responseClone.json();
+          errorDetails = errorBody.error || errorDetails;
+          if (errorBody.details) {
+            errorDetails += ` - ${errorBody.details}`;
+          }
+          console.error("[UniversalChatInterface] API Error Response:", {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorBody,
+            endpoint: config.apiEndpoint,
+            requestBody: {
+              message: requestBody.message,
+              chatId: requestBody.chatId,
+              stream: requestBody.stream,
+            },
+          });
+        } catch (parseError) {
+          // If we can't parse as JSON, try to read as text
+          try {
+            const responseText = await responseClone.text();
+            console.error("[UniversalChatInterface] API Error (unparseable):", {
+              status: response.status,
+              statusText: response.statusText,
+              responseText: responseText.substring(0, 500), // Limit log size
+              endpoint: config.apiEndpoint,
+            });
+          } catch (textError) {
+            console.error("[UniversalChatInterface] API Error (unreadable):", {
+              status: response.status,
+              statusText: response.statusText,
+              endpoint: config.apiEndpoint,
+              parseError,
+              textError,
+            });
+          }
+        }
+        throw new Error(errorDetails);
       }
 
       if (useStreaming && config.features.streaming) {

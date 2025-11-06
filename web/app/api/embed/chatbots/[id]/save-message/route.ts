@@ -98,8 +98,19 @@ export async function POST(
     });
   } catch (error) {
     console.error("Error saving message:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    console.error("Error details:", {
+      message: errorMessage,
+      stack: errorStack,
+      chatbotId: id,
+      chatId: chatId || "new",
+    });
     return NextResponse.json(
-      { error: "Failed to save message" },
+      {
+        error: "Failed to save message",
+        details: process.env.NODE_ENV === "development" ? errorMessage : undefined,
+      },
       { status: 500 }
     );
   }
