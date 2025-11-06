@@ -1,0 +1,5 @@
+{
+  "scripts": {
+    "qp": "sh -c 'MESSAGE=\"${1:-Quick push}\"; BRANCH=\"${2:-main}\"; git add . && git commit -m \"$MESSAGE\" && git push origin \"$BRANCH\"' --"
+  }
+}
