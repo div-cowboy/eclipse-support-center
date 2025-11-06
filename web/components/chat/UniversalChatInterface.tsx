@@ -151,6 +151,19 @@ export function UniversalChatInterface({
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [isLoadingHistory, setIsLoadingHistory] = useState(false); // Loading existing chat
+  
+  // Track chatId internally - use config.chatId as initial value, but update from API responses
+  const [currentChatId, setCurrentChatId] = useState<string | undefined>(
+    config.chatId
+  );
+  
+  // Update currentChatId when config.chatId changes (from parent)
+  useEffect(() => {
+    if (config.chatId) {
+      setCurrentChatId(config.chatId);
+      console.log("[UniversalChatInterface] 📝 ChatId updated from config:", config.chatId);
+    }
+  }, [config.chatId]);
 
   // Escalation state
   const [escalationRequested, setEscalationRequested] = useState(false);
@@ -210,8 +223,8 @@ export function UniversalChatInterface({
 
   // Real-time chat hook - handles message broadcasting
   const { sendMessage: sendRealtimeMessage } = useRealtimeChat({
-    chatId: config.chatId || "",
-    enabled: realtimeMode && !!config.chatId,
+    chatId: currentChatId || "",
+    enabled: realtimeMode && !!currentChatId,
     onMessage: (message: RealtimeChatMessage) => {
       // Add incoming real-time message to messages array
       console.log("[UniversalChatInterface] Received real-time message:", {
@@ -357,11 +370,11 @@ export function UniversalChatInterface({
           }
 
           // For embed chats with chatId, also load existing messages
-          if (config.type === "embed" && config.chatId) {
+          if (config.type === "embed" && currentChatId) {
             setIsLoadingHistory(true); // Start loading
             try {
               const chatResponse = await fetch(
-                `${BASE_URL}/api/embed/chats/${config.chatId}`
+                `${BASE_URL}/api/embed/chats/${currentChatId}`
               );
               if (chatResponse.ok) {
                 const chatData = await chatResponse.json();
@@ -403,11 +416,11 @@ export function UniversalChatInterface({
         } catch (error) {
           console.error("Error loading chatbot info:", error);
         }
-      } else if (config.type === "traditional" && config.chatId) {
+      } else if (config.type === "traditional" && currentChatId) {
         setIsLoadingHistory(true); // Start loading
         try {
           const response = await fetch(
-            `${BASE_URL}/api/chats/${config.chatId}`
+            `${BASE_URL}/api/chats/${currentChatId}`
           );
           if (response.ok) {
             const data = await response.json();
@@ -549,7 +562,7 @@ export function UniversalChatInterface({
                 },
                 body: JSON.stringify({
                   message: messageToSave,
-                  chatId: config.chatId || null,
+                  chatId: currentChatId || null,
                 }),
               }
             );
@@ -621,13 +634,17 @@ export function UniversalChatInterface({
               setMessages((prev) => [...prev, savedMessage]);
               setHasAutoSentFirstMessage(true);
 
-              // If chatId was created, notify parent
-              if (data.chatId && config.onChatCreated) {
-                config.onChatCreated(data.chatId);
+              // If chatId was created, update internal state and notify parent
+              if (data.chatId) {
+                setCurrentChatId(data.chatId);
                 console.log(
                   "[UniversalChatInterface] 📝 Chat ID created from auto-send:",
                   data.chatId
                 );
+                // Notify parent component
+                if (config.onChatCreated) {
+                  config.onChatCreated(data.chatId);
+                }
               }
 
               console.log(
@@ -706,18 +723,19 @@ export function UniversalChatInterface({
 
     console.log("[UniversalChatInterface] sendMessage called:", {
       realtimeMode,
-      chatId: config.chatId,
+      chatId: currentChatId,
+      configChatId: config.chatId,
       supportView: config.features.supportView,
-      willUseRealtime: realtimeMode && !!config.chatId,
+      willUseRealtime: realtimeMode && !!currentChatId,
     });
 
     // REAL-TIME MODE: Route to real-time chat system
-    if (realtimeMode && config.chatId) {
+    if (realtimeMode && currentChatId) {
       const messageRole = config.features.supportView ? "ASSISTANT" : "USER";
 
       console.log("[UniversalChatInterface] Using REAL-TIME mode:", {
         messageRole,
-        chatId: config.chatId,
+        chatId: currentChatId,
       });
 
       // OPTIMISTIC UI UPDATE: Add message to UI immediately
@@ -805,9 +823,9 @@ export function UniversalChatInterface({
         requestBody.stream = useStreaming;
       } else if (config.type === "chatbot" || config.type === "embed") {
         requestBody.stream = useStreaming;
-        // Always send chatId if available
-        requestBody.chatId = config.chatId;
-        console.log("📤 Sending message with chatId:", config.chatId);
+        // Always send chatId if available - use currentChatId (internal state) instead of config.chatId
+        requestBody.chatId = currentChatId;
+        console.log("📤 Sending message with chatId:", currentChatId);
       } else if (config.type === "traditional") {
         requestBody.chatId = config.chatId || undefined;
         requestBody.role = config.features.supportView ? "ASSISTANT" : "USER";
@@ -815,7 +833,8 @@ export function UniversalChatInterface({
 
       console.log("[UniversalChatInterface] Calling AI API:", {
         endpoint: config.apiEndpoint,
-        chatId: config.chatId,
+        chatId: currentChatId,
+        configChatId: config.chatId,
         type: config.type,
       });
 
@@ -936,14 +955,18 @@ export function UniversalChatInterface({
               const parsed = JSON.parse(data);
 
               // Capture chatId from response
-              if (parsed.chatId && config.onChatCreated) {
-                // Only call once
-                if (!assistantMessage && !config.chatId) {
-                  config.onChatCreated(parsed.chatId);
+              if (parsed.chatId) {
+                // Update internal chatId state
+                if (!currentChatId) {
+                  setCurrentChatId(parsed.chatId);
                   console.log(
                     "📝 Chat ID captured from streaming:",
                     parsed.chatId
                   );
+                  // Notify parent component
+                  if (config.onChatCreated) {
+                    config.onChatCreated(parsed.chatId);
+                  }
                 }
               }
 
@@ -1063,9 +1086,14 @@ export function UniversalChatInterface({
       }
 
       // Update chat info for new chats
-      if (data.chatId && config.onChatCreated) {
-        config.onChatCreated(data.chatId);
+      if (data.chatId) {
+        // Update internal chatId state
+        setCurrentChatId(data.chatId);
         console.log("📝 Chat ID captured from response:", data.chatId);
+        // Notify parent component
+        if (config.onChatCreated) {
+          config.onChatCreated(data.chatId);
+        }
       }
       if (data.chat) {
         setChatInfo(data.chat);

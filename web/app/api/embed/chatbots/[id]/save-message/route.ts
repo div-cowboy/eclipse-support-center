@@ -11,13 +11,25 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let id: string | undefined;
+  let chatId: string | null | undefined;
+
   try {
-    const { id } = await params;
+    const resolvedParams = await params;
+    id = resolvedParams.id;
     const body = await request.json();
     const {
       message,
-      chatId = null, // Optional chatId to add to existing chat
+      chatId: requestChatId = null, // Optional chatId to add to existing chat
     } = body;
+    chatId = requestChatId;
+
+    console.log("[SaveMessage] Request received:", {
+      chatbotId: id,
+      chatId: chatId,
+      hasMessage: !!message,
+      messageLength: message?.length,
+    });
 
     if (!message || typeof message !== "string") {
       return NextResponse.json(
@@ -103,16 +115,17 @@ export async function POST(
     console.error("Error details:", {
       message: errorMessage,
       stack: errorStack,
-      chatbotId: id,
-      chatId: chatId || "new",
+      chatbotId: id || "unknown",
+      chatId: chatId ?? "unknown",
+      hasChatId: chatId !== undefined,
     });
     return NextResponse.json(
       {
         error: "Failed to save message",
-        details: process.env.NODE_ENV === "development" ? errorMessage : undefined,
+        details:
+          process.env.NODE_ENV === "development" ? errorMessage : undefined,
       },
       { status: 500 }
     );
   }
 }
-
