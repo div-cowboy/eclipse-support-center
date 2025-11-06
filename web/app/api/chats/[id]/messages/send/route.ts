@@ -5,7 +5,7 @@ import { Redis } from "@upstash/redis";
 
 /**
  * POST /api/chats/[id]/messages/send
- * Send a real-time message in an escalated chat
+ * Send a real-time message in a chat
  * Saves to database and broadcasts via Redis pub/sub to WebSocket server
  */
 export async function POST(
@@ -58,14 +58,6 @@ export async function POST(
 
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
-    }
-
-    // Verify chat is escalated (real-time mode only for escalated chats)
-    if (!chat.escalationRequested) {
-      return NextResponse.json(
-        { error: "Chat must be escalated to use real-time messaging" },
-        { status: 400 }
-      );
     }
 
     // For ASSISTANT/AGENT role, verify authentication
