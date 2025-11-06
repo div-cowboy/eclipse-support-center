@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/shadcn/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/shadcn/ui/card";
 import { Badge } from "@/components/shadcn/ui/badge";
@@ -151,19 +151,28 @@ export function UniversalChatInterface({
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [isLoadingHistory, setIsLoadingHistory] = useState(false); // Loading existing chat
-  
+
   // Track chatId internally - use config.chatId as initial value, but update from API responses
   const [currentChatId, setCurrentChatId] = useState<string | undefined>(
     config.chatId
   );
-  
+
+  // Use a ref to track the latest chatId for synchronous access (state updates are async)
+  const currentChatIdRef = useRef<string | undefined>(config.chatId);
+
+  // Update both state and ref when chatId changes
+  const updateChatId = useCallback((newChatId: string | undefined) => {
+    setCurrentChatId(newChatId);
+    currentChatIdRef.current = newChatId;
+    console.log("[UniversalChatInterface] 📝 ChatId updated:", newChatId);
+  }, []);
+
   // Update currentChatId when config.chatId changes (from parent)
   useEffect(() => {
     if (config.chatId) {
-      setCurrentChatId(config.chatId);
-      console.log("[UniversalChatInterface] 📝 ChatId updated from config:", config.chatId);
+      updateChatId(config.chatId);
     }
-  }, [config.chatId]);
+  }, [config.chatId, updateChatId]);
 
   // Escalation state
   const [escalationRequested, setEscalationRequested] = useState(false);
@@ -562,7 +571,7 @@ export function UniversalChatInterface({
                 },
                 body: JSON.stringify({
                   message: messageToSave,
-                  chatId: currentChatId || null,
+                  chatId: currentChatIdRef.current || currentChatId || null,
                 }),
               }
             );
@@ -636,7 +645,7 @@ export function UniversalChatInterface({
 
               // If chatId was created, update internal state and notify parent
               if (data.chatId) {
-                setCurrentChatId(data.chatId);
+                updateChatId(data.chatId);
                 console.log(
                   "[UniversalChatInterface] 📝 Chat ID created from auto-send:",
                   data.chatId
@@ -823,9 +832,14 @@ export function UniversalChatInterface({
         requestBody.stream = useStreaming;
       } else if (config.type === "chatbot" || config.type === "embed") {
         requestBody.stream = useStreaming;
-        // Always send chatId if available - use currentChatId (internal state) instead of config.chatId
-        requestBody.chatId = currentChatId;
-        console.log("📤 Sending message with chatId:", currentChatId);
+        // Always send chatId if available - use ref for synchronous access to latest value
+        const chatIdToSend = currentChatIdRef.current || currentChatId;
+        requestBody.chatId = chatIdToSend;
+        console.log("📤 Sending message with chatId:", {
+          fromRef: currentChatIdRef.current,
+          fromState: currentChatId,
+          final: chatIdToSend,
+        });
       } else if (config.type === "traditional") {
         requestBody.chatId = config.chatId || undefined;
         requestBody.role = config.features.supportView ? "ASSISTANT" : "USER";
@@ -957,8 +971,8 @@ export function UniversalChatInterface({
               // Capture chatId from response
               if (parsed.chatId) {
                 // Update internal chatId state
-                if (!currentChatId) {
-                  setCurrentChatId(parsed.chatId);
+                if (!currentChatIdRef.current) {
+                  updateChatId(parsed.chatId);
                   console.log(
                     "📝 Chat ID captured from streaming:",
                     parsed.chatId
@@ -1088,7 +1102,7 @@ export function UniversalChatInterface({
       // Update chat info for new chats
       if (data.chatId) {
         // Update internal chatId state
-        setCurrentChatId(data.chatId);
+        updateChatId(data.chatId);
         console.log("📝 Chat ID captured from response:", data.chatId);
         // Notify parent component
         if (config.onChatCreated) {
