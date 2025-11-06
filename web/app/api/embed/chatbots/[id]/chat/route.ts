@@ -12,6 +12,45 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Validate DATABASE_URL is configured
+    if (!process.env.DATABASE_URL) {
+      console.error("DATABASE_URL is not configured");
+      return NextResponse.json(
+        {
+          error: "Database configuration error",
+          details:
+            process.env.NODE_ENV === "development"
+              ? "DATABASE_URL environment variable is missing"
+              : undefined,
+        },
+        { status: 500 }
+      );
+    }
+
+    // Check if DATABASE_URL has invalid format
+    const dbUrl = process.env.DATABASE_URL;
+    if (
+      !dbUrl.startsWith("postgresql://") &&
+      !dbUrl.startsWith("postgres://") &&
+      !dbUrl.startsWith("prisma://") &&
+      !dbUrl.startsWith("prisma+postgres://")
+    ) {
+      console.error("Invalid DATABASE_URL format:", {
+        urlPrefix: dbUrl.substring(0, 20) + "...",
+        hasUrl: !!dbUrl,
+      });
+      return NextResponse.json(
+        {
+          error: "Database configuration error",
+          details:
+            process.env.NODE_ENV === "development"
+              ? `DATABASE_URL must start with postgresql://, postgres://, prisma://, or prisma+postgres://`
+              : undefined,
+        },
+        { status: 500 }
+      );
+    }
+
     const { id } = await params;
     const body = await request.json();
     const {
@@ -19,8 +58,11 @@ export async function POST(
       conversationHistory = [],
       stream = false,
       config = {},
-      chatId = null, // Optional chatId to continue existing conversation
+      chatId: rawChatId, // Optional chatId to continue existing conversation
     } = body;
+    
+    // Normalize undefined to null for chatId
+    const chatId = rawChatId || null;
 
     if (!message || typeof message !== "string") {
       return NextResponse.json(
@@ -207,10 +249,38 @@ export async function POST(
     console.error("Error in embed chatbot chat endpoint:", error);
     const errorMessage = error instanceof Error ? error.message : String(error);
     const errorStack = error instanceof Error ? error.stack : undefined;
+    
+    // Check for Prisma connection errors
+    const isPrismaConnectionError =
+      errorMessage.includes("prisma://") ||
+      errorMessage.includes("prisma+postgres://") ||
+      errorMessage.includes("datasource") ||
+      errorMessage.includes("URL must start");
+
     console.error("Error details:", {
       message: errorMessage,
       stack: errorStack,
+      isPrismaConnectionError,
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      databaseUrlPrefix: process.env.DATABASE_URL
+        ? process.env.DATABASE_URL.substring(0, 30) + "..."
+        : "MISSING",
     });
+
+    // Provide more helpful error for database connection issues
+    if (isPrismaConnectionError) {
+      return NextResponse.json(
+        {
+          error: "Database configuration error",
+          details:
+            process.env.NODE_ENV === "development"
+              ? `Database connection error: ${errorMessage}. Check that DATABASE_URL is set correctly in Vercel environment variables.`
+              : "Database connection error. Please check server logs.",
+        },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
       {
         error: "Internal server error",
