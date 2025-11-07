@@ -40,6 +40,11 @@ interface TraditionalChat {
   assignedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  metadata?: {
+    customerEmail?: string;
+    emailCollectedAt?: string;
+    [key: string]: unknown;
+  };
   messages: Array<{
     id: string;
     content: string;
@@ -477,6 +482,14 @@ export default function ChatDetailPage() {
                 </p>
                 <p className="text-sm">{chat._count?.messages || 0}</p>
               </div>
+              {chat.metadata?.customerEmail && (
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                    Customer Email
+                  </p>
+                  <p className="text-sm font-mono">{chat.metadata.customerEmail}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
 

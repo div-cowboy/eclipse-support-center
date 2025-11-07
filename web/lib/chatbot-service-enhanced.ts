@@ -462,34 +462,59 @@ export class EnhancedChatbotService {
     }> = [];
 
     try {
+      // Ensure maxResults is a valid integer, default to 10 if not provided
+      const validMaxResults =
+        Number.isInteger(maxResults) && maxResults > 0 ? maxResults : 10;
+
       // Search organization descriptions first (highest priority)
       if (this.organizationDescriptionVectorService) {
-        const orgDescResults = await this.searchOrganizationDescriptions(
-          query,
-          organizationId,
-          Math.ceil(maxResults / 3)
-        );
-        allResults.push(...orgDescResults);
+        const orgDescTopK = Math.max(1, Math.ceil(validMaxResults / 3)); // Ensure at least 1
+
+        try {
+          const orgDescResults = await this.searchOrganizationDescriptions(
+            query,
+            organizationId,
+            orgDescTopK
+          );
+          allResults.push(...orgDescResults);
+        } catch (error) {
+          console.error("Error searching organization descriptions:", error);
+          // Continue with other searches even if this one fails
+        }
       }
 
       // Search organization documents
       if (includeOrganizationDocs && this.organizationVectorService) {
-        const orgResults = await this.searchOrganizationDocuments(
-          query,
-          organizationId,
-          Math.ceil(maxResults / 3)
-        );
-        allResults.push(...orgResults);
+        const orgTopK = Math.max(1, Math.ceil(validMaxResults / 3)); // Ensure at least 1
+
+        try {
+          const orgResults = await this.searchOrganizationDocuments(
+            query,
+            organizationId,
+            orgTopK
+          );
+          allResults.push(...orgResults);
+        } catch (error) {
+          console.error("Error searching organization documents:", error);
+          // Continue with other searches even if this one fails
+        }
       }
 
       // Search context blocks
       if (includeContextBlocks && this.contextBlockVectorService) {
-        const contextResults = await this.searchContextBlocks(
-          query,
-          chatbotId,
-          Math.ceil(maxResults / 3)
-        );
-        allResults.push(...contextResults);
+        const contextTopK = Math.max(1, Math.ceil(validMaxResults / 3)); // Ensure at least 1
+
+        try {
+          const contextResults = await this.searchContextBlocks(
+            query,
+            chatbotId,
+            contextTopK
+          );
+          allResults.push(...contextResults);
+        } catch (error) {
+          console.error("Error searching context blocks:", error);
+          // Continue even if this search fails
+        }
       }
 
       // Filter by minimum score threshold (removes low-relevance results)

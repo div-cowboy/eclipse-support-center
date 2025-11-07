@@ -135,6 +135,7 @@ export async function POST(
           type: "agent_joined",
           agentId: user.id,
           agentName: agentName,
+          agentOnly: false, // Visible to both customer and agent
         },
       },
     });

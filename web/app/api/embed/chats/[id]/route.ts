@@ -88,6 +88,7 @@ export async function GET(
       assignedToId: chat.assignedToId,
       assignedTo: chat.assignedTo,
       assignedAt: chat.assignedAt,
+      metadata: chat.metadata, // Include metadata (contains customerEmail)
       createdAt: chat.createdAt,
       updatedAt: chat.updatedAt,
       messages: chat.messages,

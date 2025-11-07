@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/shadcn/ui/select";
 import { Checkbox } from "@/components/shadcn/ui/checkbox";
+import { X, Plus, GripVertical } from "lucide-react";
 
 interface Organization {
   id: string;
@@ -44,6 +45,9 @@ interface ChatbotFormProps {
       coreRules?: Record<string, unknown>;
       chatStartType?: "AI_ASSISTANT" | "HUMAN" | "CATEGORY_SELECT";
       requireNameAndEmail?: boolean;
+      customerEmailRequired?: boolean;
+      staticMessage?: string;
+      categorySubjects?: string[];
     };
     organizationId: string;
   };
@@ -63,6 +67,9 @@ interface ChatbotFormProps {
       coreRules?: Record<string, unknown>;
       chatStartType?: "AI_ASSISTANT" | "HUMAN" | "CATEGORY_SELECT";
       requireNameAndEmail?: boolean;
+      customerEmailRequired?: boolean;
+      staticMessage?: string;
+      categorySubjects?: string[];
     };
   }) => Promise<void>;
   onCancel: () => void;
@@ -87,16 +94,18 @@ export function ChatbotForm({
       | "HUMAN"
       | "CATEGORY_SELECT",
     requireNameAndEmail: chatbot?.config?.requireNameAndEmail || false,
+    customerEmailRequired:
+      chatbot?.config?.customerEmailRequired !== undefined
+        ? chatbot.config.customerEmailRequired
+        : true, // Default to true
+    staticMessage: chatbot?.config?.staticMessage || "",
+    categorySubjects:
+      (chatbot?.config?.categorySubjects as string[]) || [],
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.organizationId) return;
-
-    // Handle category select console log
-    if (formData.chatStartType === "CATEGORY_SELECT") {
-      console.log("Category select selected - this will be implemented later");
-    }
 
     await onSubmit({
       name: formData.name.trim(),
@@ -108,8 +117,38 @@ export function ChatbotForm({
         systemPrompt: formData.systemPrompt.trim() || undefined,
         chatStartType: formData.chatStartType,
         requireNameAndEmail: formData.requireNameAndEmail,
+        customerEmailRequired: formData.customerEmailRequired,
+        staticMessage:
+          formData.staticMessage.trim() || undefined,
+        categorySubjects:
+          formData.categorySubjects.length > 0
+            ? formData.categorySubjects
+            : undefined,
       },
     });
+  };
+
+  const addCategorySubject = () => {
+    setFormData((prev) => ({
+      ...prev,
+      categorySubjects: [...prev.categorySubjects, ""],
+    }));
+  };
+
+  const updateCategorySubject = (index: number, value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      categorySubjects: prev.categorySubjects.map((subject, i) =>
+        i === index ? value : subject
+      ),
+    }));
+  };
+
+  const removeCategorySubject = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      categorySubjects: prev.categorySubjects.filter((_, i) => i !== index),
+    }));
   };
 
   return (
@@ -266,6 +305,105 @@ export function ChatbotForm({
               Require name and email before starting chat
             </Label>
           </div>
+
+          <div className="flex items-center space-x-2">
+            <Checkbox
+              id="customerEmailRequired"
+              checked={formData.customerEmailRequired}
+              onCheckedChange={(checked) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  customerEmailRequired: checked === true,
+                }))
+              }
+            />
+            <Label
+              htmlFor="customerEmailRequired"
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer"
+            >
+              Customer Email Required
+            </Label>
+          </div>
+
+          {/* Static Message - shown for AI_ASSISTANT and HUMAN */}
+          {(formData.chatStartType === "AI_ASSISTANT" ||
+            formData.chatStartType === "HUMAN") && (
+            <div className="space-y-2">
+              <Label htmlFor="staticMessage">Static Message</Label>
+              <Textarea
+                id="staticMessage"
+                value={formData.staticMessage}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    staticMessage: e.target.value,
+                  }))
+                }
+                placeholder="Enter the initial message that will be shown when chats begin..."
+                rows={4}
+              />
+              <p className="text-xs text-muted-foreground">
+                This message will be displayed when a chat starts with this
+                chatbot. It appears before the user sends their first message.
+              </p>
+            </div>
+          )}
+
+          {/* Category Subjects - shown for CATEGORY_SELECT */}
+          {formData.chatStartType === "CATEGORY_SELECT" && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="categorySubjects">Category Subjects</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addCategorySubject}
+                  className="h-8"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Category
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {formData.categorySubjects.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No categories added. Click "Add Category" to create one.
+                  </p>
+                ) : (
+                  formData.categorySubjects.map((subject, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center gap-2 p-2 border rounded-md"
+                    >
+                      <GripVertical className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                      <Input
+                        value={subject}
+                        onChange={(e) =>
+                          updateCategorySubject(index, e.target.value)
+                        }
+                        placeholder={`Category ${index + 1}`}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeCategorySubject(index)}
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                These categories will be shown to users when they start a chat.
+                Users can select a category to begin their conversation.
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end space-x-3">
             <Button type="button" variant="outline" onClick={onCancel}>

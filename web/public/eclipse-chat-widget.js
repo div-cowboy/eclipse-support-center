@@ -271,7 +271,11 @@ class EclipseChatWidget {
 
     // Use baseUrl if provided, otherwise use current origin (for same-origin embedding)
     // If neither works, fall back to detecting from script tag or window.location
-    let baseUrl = "https://eclipse-support-center-git-main-wmg.vercel.app";
+
+    // NEEDS TO BE STATIC
+    let baseUrl = "https://069986a950f8.ngrok-free.app";
+
+    console.log("[EclipseChatWidget] 🔧 BASE URL:", baseUrl);
 
     const iframeUrl = `${baseUrl}/embed/chat?${params.toString()}`;
     console.log("[EclipseChatWidget] 🔗 Generated iframe URL:", iframeUrl, {

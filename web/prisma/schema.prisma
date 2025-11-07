@@ -145,6 +145,7 @@ model Chat {
   escalationRequestedAt DateTime?
   assignedToId          String?
   assignedAt            DateTime?
+  metadata              Json? // Store email and other chat metadata
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
   chatbotId             String?

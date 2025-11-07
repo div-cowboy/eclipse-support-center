@@ -25,6 +25,7 @@ import { TypingIndicator } from "./TypingIndicator";
 import { useRealtimeChat } from "../hooks/useRealtimeChat";
 import type { RealtimeChatMessage } from "../hooks/useRealtimeChat";
 import { CreateTicketFromChatModal } from "../tickets/CreateTicketFromChatModal";
+import { EmailForm } from "./EmailForm";
 
 // Universal message interface that covers all use cases
 interface ChatMessage {
@@ -55,9 +56,25 @@ interface ChatMessage {
     assignedTo?: string;
 
     // System message metadata
-    type?: "agent_joined" | "agent_left" | "escalation_started" | string;
+    type?:
+      | "agent_joined"
+      | "agent_left"
+      | "escalation_started"
+      | "email_submitted"
+      | string;
     agentId?: string;
     agentName?: string;
+    email?: string;
+    /**
+     * System message visibility control:
+     * - `agentOnly: true` = Only visible to agents (support view)
+     * - `agentOnly: false` or undefined = Visible to both customer and agent
+     *
+     * Examples:
+     * - agent_joined: visible to both (agentOnly: false or undefined)
+     * - email_submitted: only visible to agents (agentOnly: true)
+     */
+    agentOnly?: boolean;
   };
 }
 
@@ -111,6 +128,15 @@ export interface ChatConfig {
     customCSS?: string;
   };
 
+  // Chatbot Configuration (for embed/chatbot types)
+  chatbotConfig?: {
+    chatStartType?: "AI_ASSISTANT" | "HUMAN" | "CATEGORY_SELECT";
+    customerEmailRequired?: boolean;
+    staticMessage?: string;
+    categorySubjects?: string[];
+    hideEmailPromptMessages?: number; // Number of messages to hide before email form when email is submitted (default: 2)
+  };
+
   // Callbacks
   onChatCreated?: (chatId: string) => void;
   onEscalationRequested?: (reason: string) => void;
@@ -124,15 +150,16 @@ interface UniversalChatInterfaceProps {
   config: ChatConfig;
 }
 
-const BASE_URL = "https://eclipse-support-center-git-main-wmg.vercel.app";
-// const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL;
-
 export function UniversalChatInterface({
   config,
 }: UniversalChatInterfaceProps) {
   // Log initial config on mount
   useEffect(() => {
-    console.log("[UniversalChatInterface] 🎬 INITIAL CONFIG:", {
+    console.log("=".repeat(80));
+    console.log(
+      "[UniversalChatInterface] 🎬 COMPONENT MOUNTED - INITIAL CONFIG:"
+    );
+    console.log({
       type: config.type,
       chatbotId: config.chatbotId,
       chatId: config.chatId,
@@ -143,6 +170,7 @@ export function UniversalChatInterface({
       apiEndpoint: config.apiEndpoint,
       escalationEnabled: true, // Always enabled
     });
+    console.log("=".repeat(80));
   }, []); // Only run once on mount
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -150,7 +178,10 @@ export function UniversalChatInterface({
   const [isLoading, setIsLoading] = useState(false);
   const [isStreaming, setIsStreaming] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false); // Loading existing chat
+  // Initialize loading state to true if we have a chatId (need to check if previous chats exist)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(
+    !!config.chatId // Start loading if we have a chatId
+  );
 
   // Track chatId internally - use config.chatId as initial value, but update from API responses
   const [currentChatId, setCurrentChatId] = useState<string | undefined>(
@@ -208,6 +239,23 @@ export function UniversalChatInterface({
     config.features.realtimeMode || false
   );
 
+  // Debug: Track realtimeMode changes
+  useEffect(() => {
+    console.log("[REALTIME] 🔵 REALTIME MODE STATE:", {
+      realtimeMode,
+      configRealtimeMode: config.features.realtimeMode,
+      currentChatId,
+      escalationRequested,
+      escalationActivated,
+    });
+  }, [
+    realtimeMode,
+    config.features.realtimeMode,
+    currentChatId,
+    escalationRequested,
+    escalationActivated,
+  ]);
+
   // Chat info state
   const [chatInfo, setChatInfo] = useState<{
     name?: string;
@@ -220,26 +268,87 @@ export function UniversalChatInterface({
     _count?: { messages?: number; contextBlocks?: number };
   } | null>(null);
   const [hasShownWelcome, setHasShownWelcome] = useState(false);
-  const [hasAutoSentFirstMessage, setHasAutoSentFirstMessage] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
   const [showTicketModal, setShowTicketModal] = useState(false);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingContent, setEditingContent] = useState<string>("");
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
+  // Email collection state
+  const [awaitingEmail, setAwaitingEmail] = useState(false);
+  const [hasEmail, setHasEmail] = useState(false);
+  const [emailPromptMessageId, setEmailPromptMessageId] = useState<
+    string | null
+  >(null);
+  const [responseMessageId, setResponseMessageId] = useState<string | null>(
+    null
+  ); // Track confirmation message ID to hide when email is submitted
+
+  // Debug: Track email state changes
+  useEffect(() => {
+    console.log("[UniversalChatInterface] 📧 EMAIL STATE CHANGED:", {
+      awaitingEmail,
+      hasEmail,
+      emailPromptMessageId,
+      currentChatId,
+      messagesCount: messages.length,
+      chatbotConfig: config.chatbotConfig,
+    });
+  }, [
+    awaitingEmail,
+    hasEmail,
+    emailPromptMessageId,
+    currentChatId,
+    messages.length,
+    config.chatbotConfig,
+  ]);
+
+  // Safety check: Ensure hasEmail and awaitingEmail are consistent
+  // If hasEmail is true, awaitingEmail should be false
+  useEffect(() => {
+    if (hasEmail && awaitingEmail) {
+      console.log(
+        "[UniversalChatInterface] ⚠️ Inconsistent email state - fixing:",
+        {
+          hasEmail,
+          awaitingEmail,
+          willSetAwaitingEmail: false,
+        }
+      );
+      setAwaitingEmail(false);
+    }
+  }, [hasEmail, awaitingEmail]);
+
+  // Category selection state
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [showCategoryList, setShowCategoryList] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Real-time chat hook - handles message broadcasting
-  const { sendMessage: sendRealtimeMessage } = useRealtimeChat({
+  const {
+    sendMessage: sendRealtimeMessage,
+    isConnected: wsConnected,
+    error: wsError,
+  } = useRealtimeChat({
     chatId: currentChatId || "",
     enabled: realtimeMode && !!currentChatId,
+    onConnected: () => {
+      console.log("[REALTIME] ✅ WEBSOCKET CONNECTED (callback)");
+    },
+    onDisconnected: () => {
+      console.log("[REALTIME] ⚠️ WEBSOCKET DISCONNECTED (callback)");
+    },
     onMessage: (message: RealtimeChatMessage) => {
       // Add incoming real-time message to messages array
-      console.log("[UniversalChatInterface] Received real-time message:", {
+      console.log("[REALTIME] 🟢 RECEIVED MESSAGE:", {
         id: message.id,
         role: message.role,
+        content: message.content.substring(0, 50),
         sender: message.sender.name,
+        senderId: message.sender.id,
+        timestamp: message.timestamp,
       });
 
       const chatMessage: ChatMessage = {
@@ -251,14 +360,55 @@ export function UniversalChatInterface({
       };
 
       setMessages((prev) => {
-        // Check if message already exists (avoid duplicates from optimistic updates)
-        const exists = prev.some((msg) => msg.id === message.id);
-        if (exists) {
-          console.log(
-            "[UniversalChatInterface] Message already exists, skipping"
-          );
+        // Check if message already exists by ID (avoid duplicates from API responses)
+        const existsById = prev.some((msg) => msg.id === message.id);
+        if (existsById) {
+          console.log("[REALTIME] ⚠️ Message already exists by ID, skipping:", {
+            messageId: message.id,
+            currentMessagesCount: prev.length,
+          });
           return prev;
         }
+
+        // If this is from the current user, check if we already have an optimistic message with the same content
+        // This prevents duplicates when the user's own message comes back via WebSocket
+        if (message.sender.id === config.currentUserId) {
+          const hasOptimisticWithSameContent = prev.some(
+            (msg) =>
+              msg.id.startsWith("optimistic_") &&
+              msg.content === message.content &&
+              msg.role === message.role
+          );
+
+          if (hasOptimisticWithSameContent) {
+            console.log(
+              "[REALTIME] ⚠️ Message from current user already exists as optimistic, replacing:",
+              {
+                messageId: message.id,
+                content: message.content.substring(0, 50),
+                currentMessagesCount: prev.length,
+              }
+            );
+
+            // Remove optimistic message and add the real one
+            const withoutOptimistic = prev.filter(
+              (msg) =>
+                !(
+                  msg.id.startsWith("optimistic_") &&
+                  msg.content === message.content &&
+                  msg.role === message.role
+                )
+            );
+
+            return [...withoutOptimistic, chatMessage];
+          }
+        }
+
+        console.log("[REALTIME] 🟢 ADDING MESSAGE TO UI:", {
+          messageId: message.id,
+          beforeCount: prev.length,
+          willBeCount: prev.length + 1,
+        });
 
         // Remove any optimistic message with same content (replace optimistic with real)
         const withoutOptimistic = prev.filter(
@@ -347,6 +497,7 @@ export function UniversalChatInterface({
             type: "agent_joined",
             agentId: agent.agentId,
             agentName: agent.agentName,
+            agentOnly: false, // Visible to both customer and agent
           },
         };
 
@@ -355,9 +506,21 @@ export function UniversalChatInterface({
       });
     },
     onError: (error) => {
-      console.error("[UniversalChatInterface] Real-time error:", error);
+      console.error("[REALTIME] ❌ WEBSOCKET ERROR:", error);
     },
   });
+
+  // Reset loading state and messages when chatId changes
+  useEffect(() => {
+    if (config.chatId) {
+      // When opening a new chat, reset state and show loading
+      setIsLoadingHistory(true);
+      setMessages([]);
+    } else {
+      // When chatId is cleared (new chat), reset loading state
+      setIsLoadingHistory(false);
+    }
+  }, [config.chatId]);
 
   // Load chat info based on type
   useEffect(() => {
@@ -372,18 +535,148 @@ export function UniversalChatInterface({
             config.type === "embed"
               ? `/api/embed/chatbots/${config.chatbotId}`
               : `/api/chatbots/${config.chatbotId}`;
-          const response = await fetch(`${BASE_URL}${endpoint}`);
+          const response = await fetch(`${endpoint}`);
           if (response.ok) {
             const data = await response.json();
             setChatInfo(data);
           }
 
+          // For embed chats without chatId, create chat and auto-send first message if configured
+          if (
+            config.type === "embed" &&
+            !currentChatId &&
+            config.autoSendFirstMessage &&
+            config.chatbotId
+          ) {
+            console.log(
+              "[UniversalChatInterface] 🚀 Creating new chat and auto-sending first message:",
+              {
+                chatbotId: config.chatbotId,
+                autoSendFirstMessage: config.autoSendFirstMessage.substring(
+                  0,
+                  50
+                ),
+              }
+            );
+            setIsLoadingHistory(true);
+            try {
+              // Create chat and auto-send first message
+              const createResponse = await fetch(
+                `/api/embed/chatbots/${config.chatbotId}/save-message`,
+                {
+                  method: "POST",
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    message: config.autoSendFirstMessage,
+                    chatId: null, // Create new chat
+                  }),
+                }
+              );
+
+              if (createResponse.ok) {
+                const createData = await createResponse.json();
+                if (createData.success && createData.chatId) {
+                  console.log(
+                    "[UniversalChatInterface] ✅ Chat created with auto-sent first message:",
+                    {
+                      chatId: createData.chatId,
+                      messageId: createData.message.id,
+                    }
+                  );
+                  // Update chatId
+                  updateChatId(createData.chatId);
+                  // Notify parent
+                  if (config.onChatCreated) {
+                    config.onChatCreated(createData.chatId);
+                  }
+
+                  // Load chat history to show the auto-sent first message
+                  const chatResponse = await fetch(
+                    `/api/embed/chats/${createData.chatId}`
+                  );
+                  if (chatResponse.ok) {
+                    const chatData = await chatResponse.json();
+                    // Map database message roles to frontend format
+                    const mappedMessages = (chatData.messages || []).map(
+                      (msg: {
+                        role: string;
+                        createdAt: string;
+                        userId?: string;
+                        [key: string]: unknown;
+                      }) => ({
+                        ...msg,
+                        role: msg.role.toLowerCase() as
+                          | "user"
+                          | "assistant"
+                          | "agent"
+                          | "system",
+                        timestamp: new Date(msg.createdAt),
+                        userId: msg.userId,
+                      })
+                    );
+
+                    // Deduplicate messages by ID to prevent duplicates
+                    const uniqueMessages = mappedMessages.reduce(
+                      (acc: ChatMessage[], msg: ChatMessage) => {
+                        const exists = acc.some(
+                          (existing) => existing.id === msg.id
+                        );
+                        if (!exists) {
+                          acc.push(msg);
+                        } else {
+                          console.log(
+                            "[UniversalChatInterface] ⚠️ Duplicate message detected and removed:",
+                            {
+                              messageId: msg.id,
+                              content: msg.content.substring(0, 50),
+                            }
+                          );
+                        }
+                        return acc;
+                      },
+                      []
+                    );
+
+                    // Sort by timestamp to ensure correct order
+                    uniqueMessages.sort(
+                      (a: ChatMessage, b: ChatMessage) =>
+                        new Date(a.timestamp).getTime() -
+                        new Date(b.timestamp).getTime()
+                    );
+
+                    setMessages(uniqueMessages);
+                    console.log(
+                      "[UniversalChatInterface] ✅ Loaded chat history with auto-sent first message:",
+                      {
+                        chatId: createData.chatId,
+                        messagesCount: mappedMessages.length,
+                      }
+                    );
+                  }
+                }
+              } else {
+                console.error(
+                  "[UniversalChatInterface] ❌ Failed to create chat:",
+                  await createResponse.text()
+                );
+              }
+            } catch (error) {
+              console.error(
+                "[UniversalChatInterface] ❌ Error creating chat:",
+                error
+              );
+            } finally {
+              setIsLoadingHistory(false);
+            }
+          }
           // For embed chats with chatId, also load existing messages
-          if (config.type === "embed" && currentChatId) {
+          else if (config.type === "embed" && currentChatId) {
             setIsLoadingHistory(true); // Start loading
             try {
               const chatResponse = await fetch(
-                `${BASE_URL}/api/embed/chats/${currentChatId}`
+                `/api/embed/chats/${currentChatId}`
               );
               if (chatResponse.ok) {
                 const chatData = await chatResponse.json();
@@ -405,15 +698,186 @@ export function UniversalChatInterface({
                     userId: msg.userId,
                   })
                 );
-                setMessages(mappedMessages);
+
+                // Deduplicate messages by ID to prevent duplicates
+                const uniqueMessages = mappedMessages.reduce(
+                  (acc: ChatMessage[], msg: ChatMessage) => {
+                    const exists = acc.some(
+                      (existing) => existing.id === msg.id
+                    );
+                    if (!exists) {
+                      acc.push(msg);
+                    } else {
+                      console.log(
+                        "[UniversalChatInterface] ⚠️ Duplicate message detected and removed:",
+                        {
+                          messageId: msg.id,
+                          content: msg.content.substring(0, 50),
+                        }
+                      );
+                    }
+                    return acc;
+                  },
+                  []
+                );
+
+                // Sort by timestamp to ensure correct order
+                uniqueMessages.sort(
+                  (a: ChatMessage, b: ChatMessage) =>
+                    new Date(a.timestamp).getTime() -
+                    new Date(b.timestamp).getTime()
+                );
+
+                setMessages(uniqueMessages);
 
                 // Update chat info with escalation status
                 if (chatData.escalationRequested) {
+                  console.log(
+                    "[REALTIME] 🔵 CHAT IS ESCALATED - ENABLING REAL-TIME MODE:",
+                    {
+                      chatId: chatData.id,
+                      escalationRequested: chatData.escalationRequested,
+                      escalationReason: chatData.escalationReason,
+                    }
+                  );
                   setEscalationRequested(true);
                   setEscalationReason(chatData.escalationReason || "");
                   setEscalationActivated(true);
                   // Enable real-time mode if chat is escalated
                   setRealtimeMode(true);
+                } else {
+                  console.log(
+                    "[REALTIME] ⚪ CHAT NOT ESCALATED - USING AI MODE:",
+                    {
+                      chatId: chatData.id,
+                      escalationRequested: chatData.escalationRequested,
+                    }
+                  );
+                }
+
+                // Check if email has been collected
+                console.log(
+                  "[UniversalChatInterface] 📧 EMAIL CHECK (loading chat):",
+                  {
+                    hasMetadata: !!chatData.metadata,
+                    metadata: chatData.metadata,
+                    customerEmail: chatData.metadata?.customerEmail,
+                    messagesCount: mappedMessages.length,
+                  }
+                );
+
+                // Check if email is already submitted
+                console.log(
+                  "[UniversalChatInterface] 🔍 CHECKING EMAIL IN METADATA:",
+                  {
+                    hasMetadata: !!chatData.metadata,
+                    metadataType: typeof chatData.metadata,
+                    metadataKeys: chatData.metadata
+                      ? Object.keys(chatData.metadata)
+                      : [],
+                    rawMetadata: chatData.metadata,
+                    customerEmail: chatData.metadata?.customerEmail,
+                    customerEmailType: typeof chatData.metadata?.customerEmail,
+                    customerEmailTruthy: !!chatData.metadata?.customerEmail,
+                  }
+                );
+                const hasEmailInMetadata = !!chatData.metadata?.customerEmail;
+                console.log(
+                  "[UniversalChatInterface] 📧 EMAIL METADATA CHECK RESULT:",
+                  {
+                    hasEmailInMetadata,
+                    willSetHasEmail: hasEmailInMetadata,
+                    willSetAwaitingEmail: !hasEmailInMetadata,
+                  }
+                );
+                if (hasEmailInMetadata) {
+                  console.log(
+                    "[UniversalChatInterface] ✅ Email already collected - SETTING STATE:",
+                    {
+                      email: chatData.metadata.customerEmail,
+                      willSetHasEmail: true,
+                      willSetAwaitingEmail: false,
+                      currentHasEmail: hasEmail,
+                      currentAwaitingEmail: awaitingEmail,
+                    }
+                  );
+                  // Explicitly set state to ensure form doesn't show
+                  setHasEmail(true);
+                  setAwaitingEmail(false);
+                  console.log(
+                    "[UniversalChatInterface] ✅ STATE SET - hasEmail=true, awaitingEmail=false"
+                  );
+                } else {
+                  console.log(
+                    "[UniversalChatInterface] ⚠️ No email in metadata - SETTING STATE:",
+                    {
+                      willSetHasEmail: false,
+                      currentHasEmail: hasEmail,
+                      currentAwaitingEmail: awaitingEmail,
+                    }
+                  );
+                  // Make sure hasEmail is false if email isn't in metadata
+                  setHasEmail(false);
+                }
+
+                // Check if we're awaiting email (look for email prompt message)
+                // We need to find this even if email is submitted, so we can hide the messages
+                const emailPromptMsg = mappedMessages.find(
+                  (msg: ChatMessage) =>
+                    msg.role === "assistant" &&
+                    msg.content.includes("business email address")
+                );
+                console.log(
+                  "[UniversalChatInterface] 🔍 EMAIL PROMPT MESSAGE SEARCH:",
+                  {
+                    foundEmailPrompt: !!emailPromptMsg,
+                    emailPromptMsgId: emailPromptMsg?.id,
+                    emailPromptMsgContent: emailPromptMsg?.content,
+                    hasCustomerEmail: hasEmailInMetadata,
+                  }
+                );
+
+                // Always track email prompt message ID if found (needed for hiding messages)
+                // Keep this even when email is submitted so we can hide the messages
+                if (emailPromptMsg) {
+                  setEmailPromptMessageId(emailPromptMsg.id);
+
+                  // Find confirmation message (the one before email prompt) to track for hiding
+                  const emailPromptIndex = mappedMessages.findIndex(
+                    (msg) => msg.id === emailPromptMsg.id
+                  );
+                  if (emailPromptIndex > 0) {
+                    const confirmationMsg =
+                      mappedMessages[emailPromptIndex - 1];
+                    if (
+                      confirmationMsg.role === "assistant" &&
+                      confirmationMsg.content.includes("I'd be happy to help")
+                    ) {
+                      setResponseMessageId(confirmationMsg.id);
+                      console.log(
+                        "[UniversalChatInterface] 📧 Found confirmation message to hide:",
+                        {
+                          responseMessageId: confirmationMsg.id,
+                          messageContent: confirmationMsg.content.substring(
+                            0,
+                            50
+                          ),
+                        }
+                      );
+                    }
+                  }
+                }
+
+                // Only set awaiting email if email hasn't been submitted yet
+                if (emailPromptMsg && !hasEmailInMetadata) {
+                  console.log(
+                    "[UniversalChatInterface] 📧 Setting awaiting email state:",
+                    {
+                      emailPromptMessageId: emailPromptMsg.id,
+                      emailPromptContent: emailPromptMsg.content,
+                    }
+                  );
+                  setAwaitingEmail(true);
                 }
               }
             } catch (error) {
@@ -428,9 +892,7 @@ export function UniversalChatInterface({
       } else if (config.type === "traditional" && currentChatId) {
         setIsLoadingHistory(true); // Start loading
         try {
-          const response = await fetch(
-            `${BASE_URL}/api/chats/${currentChatId}`
-          );
+          const response = await fetch(`/api/chats/${currentChatId}`);
           if (response.ok) {
             const data = await response.json();
             setChatInfo(data);
@@ -450,18 +912,51 @@ export function UniversalChatInterface({
                 timestamp: new Date(msg.createdAt),
               })
             );
-            setMessages(mappedMessages);
+
+            // Deduplicate messages by ID to prevent duplicates
+            const uniqueMessages = mappedMessages.reduce(
+              (acc: ChatMessage[], msg: ChatMessage) => {
+                const exists = acc.some((existing) => existing.id === msg.id);
+                if (!exists) {
+                  acc.push(msg);
+                } else {
+                  console.log(
+                    "[UniversalChatInterface] ⚠️ Duplicate message detected and removed:",
+                    {
+                      messageId: msg.id,
+                      content: msg.content.substring(0, 50),
+                    }
+                  );
+                }
+                return acc;
+              },
+              []
+            );
+
+            // Sort by timestamp to ensure correct order
+            uniqueMessages.sort(
+              (a: ChatMessage, b: ChatMessage) =>
+                new Date(a.timestamp).getTime() -
+                new Date(b.timestamp).getTime()
+            );
+
+            setMessages(uniqueMessages);
 
             // Update escalation status if chat is already escalated
             if (data.escalationRequested) {
+              console.log(
+                "[REALTIME] 🔵 ESCALATION DETECTED IN RESPONSE - ENABLING REAL-TIME MODE:",
+                {
+                  escalationRequested: data.escalationRequested,
+                  escalationReason: data.escalationReason,
+                  chatId: currentChatId,
+                }
+              );
               setEscalationRequested(true);
               setEscalationReason(data.escalationReason || "");
               setEscalationActivated(true); // Set escalation as activated
               // Enable real-time mode if chat is escalated
               setRealtimeMode(true);
-              console.log(
-                "[UniversalChatInterface] Traditional chat is escalated, activating real-time mode"
-              );
             }
           }
         } catch (error) {
@@ -469,11 +964,34 @@ export function UniversalChatInterface({
         } finally {
           setIsLoadingHistory(false); // Done loading
         }
+      } else if (config.chatId) {
+        // If we have a chatId but didn't enter any loading branch, reset loading state
+        // This handles edge cases where type doesn't match or chatbotId is missing
+        setIsLoadingHistory(false);
       }
     };
 
     loadChatInfo();
-  }, [config.type, config.chatbotId, config.chatId]);
+  }, [config.type, config.chatbotId, config.chatId, currentChatId]);
+
+  // Initialize category selection and email collection based on chatbot config
+  useEffect(() => {
+    if (
+      config.type === "embed" &&
+      config.chatbotConfig?.chatStartType === "CATEGORY_SELECT" &&
+      !config.chatId &&
+      !isLoadingHistory &&
+      messages.length === 0
+    ) {
+      setShowCategoryList(true);
+    }
+  }, [
+    config.type,
+    config.chatbotConfig?.chatStartType,
+    config.chatId,
+    isLoadingHistory,
+    messages.length,
+  ]);
 
   // Show welcome message (only for NEW chats, not when loading existing chat)
   useEffect(() => {
@@ -515,197 +1033,8 @@ export function UniversalChatInterface({
     isLoadingHistory,
   ]);
 
-  // Auto-send first message (only for NEW chats, not when loading existing chat)
-  // This saves the message as ASSISTANT role to database WITHOUT triggering AI response
-  // Appears on support rep side (left side) of the chat
-  useEffect(() => {
-    console.log("[UniversalChatInterface] 🔄 AUTO-SEND CHECK:", {
-      hasAutoSendFirstMessage: !!config.autoSendFirstMessage,
-      autoSendFirstMessage: config.autoSendFirstMessage,
-      hasAutoSentFirstMessage,
-      hasChatId: !!config.chatId,
-      isLoadingHistory,
-      isLoading,
-      isStreaming,
-      messagesLength: messages.length,
-      chatId: config.chatId,
-      type: config.type,
-    });
-
-    if (
-      config.autoSendFirstMessage &&
-      !hasAutoSentFirstMessage &&
-      !config.chatId && // Only for new chats
-      !isLoadingHistory && // Not while loading existing chat
-      !isLoading && // Not while sending a message
-      messages.length <= 1 && // Only if no messages or just welcome message
-      !isStreaming && // Not while streaming
-      (config.type === "embed" || config.type === "chatbot") // Only for embed/chatbot types
-    ) {
-      console.log(
-        "[UniversalChatInterface] ✅ AUTO-SEND CONDITIONS MET, saving message to database..."
-      );
-      // Wait a bit for welcome message to render if it exists
-      const timer = setTimeout(async () => {
-        const messageToSave = config.autoSendFirstMessage;
-        if (messageToSave && config.chatbotId) {
-          console.log(
-            "[UniversalChatInterface] 💾 SAVING FIRST MESSAGE AS ASSISTANT (NO AI):",
-            {
-              message: messageToSave,
-              chatbotId: config.chatbotId,
-              chatId: config.chatId,
-              type: config.type,
-              role: "assistant", // Will appear on support rep side
-            }
-          );
-
-          try {
-            // Save message to database without triggering AI
-            const response = await fetch(
-              `${BASE_URL}/api/embed/chatbots/${config.chatbotId}/save-message`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  message: messageToSave,
-                  chatId: currentChatIdRef.current || currentChatId || null,
-                }),
-              }
-            );
-
-            if (!response.ok) {
-              // Try to get error details from response body
-              // Clone response first so we can read it without consuming the original
-              const responseClone = response.clone();
-              let errorDetails = `HTTP error! status: ${response.status}`;
-              try {
-                const errorBody = await responseClone.json();
-                errorDetails = errorBody.error || errorDetails;
-                if (errorBody.details) {
-                  errorDetails += ` - ${errorBody.details}`;
-                }
-                console.error(
-                  "[UniversalChatInterface] Save Message API Error:",
-                  {
-                    status: response.status,
-                    statusText: response.statusText,
-                    error: errorBody,
-                    endpoint: `/api/embed/chatbots/${config.chatbotId}/save-message`,
-                    requestBody: {
-                      message: messageToSave,
-                      chatId: config.chatId || null,
-                    },
-                  }
-                );
-              } catch (parseError) {
-                // If we can't parse as JSON, try to read as text
-                try {
-                  const responseText = await responseClone.text();
-                  console.error(
-                    "[UniversalChatInterface] Save Message API Error (unparseable):",
-                    {
-                      status: response.status,
-                      statusText: response.statusText,
-                      responseText: responseText.substring(0, 500),
-                    }
-                  );
-                } catch (textError) {
-                  console.error(
-                    "[UniversalChatInterface] Save Message API Error (unreadable):",
-                    {
-                      status: response.status,
-                      statusText: response.statusText,
-                      parseError,
-                      textError,
-                    }
-                  );
-                }
-              }
-              throw new Error(errorDetails);
-            }
-
-            const data = await response.json();
-
-            if (data.success && data.message) {
-              // Create message object from saved message
-              const savedMessage: ChatMessage = {
-                id: data.message.id,
-                role: data.message.role as "user" | "assistant" | "agent",
-                content: data.message.content,
-                timestamp: new Date(data.message.timestamp),
-                userId: data.message.userId,
-              };
-
-              // Add to messages array
-              setMessages((prev) => [...prev, savedMessage]);
-              setHasAutoSentFirstMessage(true);
-
-              // If chatId was created, update internal state and notify parent
-              if (data.chatId) {
-                updateChatId(data.chatId);
-                console.log(
-                  "[UniversalChatInterface] 📝 Chat ID created from auto-send:",
-                  data.chatId
-                );
-                // Notify parent component
-                if (config.onChatCreated) {
-                  config.onChatCreated(data.chatId);
-                }
-              }
-
-              console.log(
-                "[UniversalChatInterface] ✅ First message saved to database successfully (no AI call)"
-              );
-            }
-          } catch (error) {
-            console.error(
-              "[UniversalChatInterface] ❌ Error saving auto-send message:",
-              error
-            );
-            // Still add to UI even if save fails (graceful degradation)
-            // Use assistant role so it appears on support rep side
-            const assistantMessage: ChatMessage = {
-              id: `auto_send_${Date.now()}`,
-              role: "assistant",
-              content: messageToSave,
-              timestamp: new Date(),
-            };
-            setMessages((prev) => [...prev, assistantMessage]);
-            setHasAutoSentFirstMessage(true);
-          }
-        }
-      }, 500); // Small delay to ensure welcome message renders first
-
-      return () => {
-        console.log(
-          "[UniversalChatInterface] 🧹 AUTO-SEND CLEANUP: clearing timer"
-        );
-        clearTimeout(timer);
-      };
-    } else if (config.autoSendFirstMessage && hasAutoSentFirstMessage) {
-      console.log(
-        "[UniversalChatInterface] ⏭️ AUTO-SEND SKIPPED: already saved"
-      );
-    } else if (config.autoSendFirstMessage) {
-      console.log(
-        "[UniversalChatInterface] ⏭️ AUTO-SEND SKIPPED: conditions not met"
-      );
-    }
-  }, [
-    config.autoSendFirstMessage,
-    config.chatbotId,
-    config.chatId,
-    config.type,
-    config.onChatCreated,
-    hasAutoSentFirstMessage,
-    isLoadingHistory,
-    isLoading,
-    isStreaming,
-    messages.length,
-  ]);
+  // Note: Auto-send first message is now handled automatically in the API route
+  // when creating a new chat. The message will be loaded when chat history is fetched.
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -728,23 +1057,36 @@ export function UniversalChatInterface({
     message: string,
     useStreaming: boolean = false
   ) => {
+    console.log("[UniversalChatInterface] 🚀 SEND MESSAGE CALLED:", {
+      message: message.substring(0, 50),
+      isLoading,
+      realtimeMode,
+      currentChatId,
+      configType: config.type,
+      hasAutoSendFirstMessage: !!config.autoSendFirstMessage,
+      autoSendFirstMessage: config.autoSendFirstMessage,
+    });
+
     if (!message.trim() || isLoading) return;
 
-    console.log("[UniversalChatInterface] sendMessage called:", {
+    console.log("[REALTIME] 🔵 SEND MESSAGE CALLED:", {
+      message: message.substring(0, 50),
       realtimeMode,
-      chatId: currentChatId,
-      configChatId: config.chatId,
-      supportView: config.features.supportView,
+      currentChatId,
       willUseRealtime: realtimeMode && !!currentChatId,
+      useStreaming,
     });
 
     // REAL-TIME MODE: Route to real-time chat system
     if (realtimeMode && currentChatId) {
       const messageRole = config.features.supportView ? "ASSISTANT" : "USER";
 
-      console.log("[UniversalChatInterface] Using REAL-TIME mode:", {
+      console.log("[REALTIME] 🔵 ROUTING TO REAL-TIME MODE:", {
         messageRole,
         chatId: currentChatId,
+        supportView: config.features.supportView,
+        wsConnected,
+        wsError,
       });
 
       // OPTIMISTIC UI UPDATE: Add message to UI immediately
@@ -761,15 +1103,19 @@ export function UniversalChatInterface({
       setIsLoading(true);
 
       try {
+        console.log("[REALTIME] 🔵 CALLING sendRealtimeMessage:", {
+          message: message.substring(0, 50),
+          messageRole,
+          chatId: currentChatId,
+        });
+
         const success = await sendRealtimeMessage(message, messageRole);
 
         if (!success) {
           throw new Error("Failed to send real-time message");
         }
 
-        console.log(
-          "[UniversalChatInterface] Real-time message sent successfully"
-        );
+        console.log("[REALTIME] ✅ Message sent successfully via WebSocket");
       } catch (error) {
         console.error("Error sending real-time message:", error);
 
@@ -793,7 +1139,13 @@ export function UniversalChatInterface({
       return; // Exit early for real-time mode
     }
 
-    console.log("[UniversalChatInterface] Using AI mode (not real-time)");
+    console.log("[REALTIME] ⚪ USING AI MODE (not real-time):", {
+      realtimeMode,
+      currentChatId,
+      escalationRequested,
+      escalationActivated,
+      willUseAI: true,
+    });
 
     // AI MODE: Normal AI processing (existing code)
     const messageRole = config.features.supportView ? "assistant" : "user";
@@ -807,11 +1159,9 @@ export function UniversalChatInterface({
     setMessages((prev) => [...prev, userMessage]);
     setInputMessage("");
     setIsLoading(true);
-
-    if (useStreaming && config.features.streaming) {
-      setIsStreaming(true);
-      setStreamingContent("");
-    }
+    // Start with typing indicator, will switch to streaming when response starts
+    setIsStreaming(false);
+    setStreamingContent("");
 
     try {
       const requestBody: {
@@ -821,6 +1171,7 @@ export function UniversalChatInterface({
         stream?: boolean;
         chatId?: string;
         role?: string;
+        config?: { autoSendFirstMessage?: string };
       } = {
         message,
         conversationHistory: messages,
@@ -835,10 +1186,17 @@ export function UniversalChatInterface({
         // Always send chatId if available - use ref for synchronous access to latest value
         const chatIdToSend = currentChatIdRef.current || currentChatId;
         requestBody.chatId = chatIdToSend;
+        // Include config for auto-send first message (only when creating new chat)
+        if (config.autoSendFirstMessage && !chatIdToSend) {
+          requestBody.config = {
+            autoSendFirstMessage: config.autoSendFirstMessage,
+          };
+        }
         console.log("📤 Sending message with chatId:", {
           fromRef: currentChatIdRef.current,
           fromState: currentChatId,
           final: chatIdToSend,
+          hasAutoSendFirstMessage: !!config.autoSendFirstMessage,
         });
       } else if (config.type === "traditional") {
         requestBody.chatId = config.chatId || undefined;
@@ -851,13 +1209,32 @@ export function UniversalChatInterface({
         configChatId: config.chatId,
         type: config.type,
       });
+      console.log("[UniversalChatInterface] 📧 API REQUEST BODY:", {
+        message: message.substring(0, 50),
+        stream: useStreaming,
+        chatId: requestBody.chatId,
+        conversationHistoryLength: requestBody.conversationHistory.length,
+        hasConfig: !!requestBody.config,
+        config: requestBody.config,
+        autoSendFirstMessage: config.autoSendFirstMessage,
+      });
 
-      const response = await fetch(`${BASE_URL}${config.apiEndpoint}`, {
+      const response = await fetch(`${config.apiEndpoint}`, {
         method: config.apiMethod || "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(requestBody),
+      });
+
+      console.log("[UniversalChatInterface] 📧 API RESPONSE RECEIVED:", {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        contentType: response.headers.get("content-type"),
+        isStreaming: response.headers
+          .get("content-type")
+          ?.includes("text/event-stream"),
       });
 
       if (!response.ok) {
@@ -905,9 +1282,25 @@ export function UniversalChatInterface({
         throw new Error(errorDetails);
       }
 
-      if (useStreaming && config.features.streaming) {
+      // Check actual response content-type, not just request parameter
+      const contentType = response.headers.get("content-type") || "";
+      const isActuallyStreaming = contentType.includes("text/event-stream");
+
+      console.log("[REALTIME] ⚪ RESPONSE TYPE CHECK:", {
+        useStreaming,
+        configStreaming: config.features.streaming,
+        contentType,
+        isActuallyStreaming,
+        willUseStreaming: isActuallyStreaming,
+      });
+
+      if (isActuallyStreaming) {
+        // Enable streaming mode - typing indicator will be replaced by streaming content
+        setIsStreaming(true);
         await handleStreamingResponse(response);
       } else {
+        // Regular response - typing indicator will be replaced by the response
+        setIsStreaming(false);
         await handleRegularResponse(response);
       }
 
@@ -932,7 +1325,7 @@ export function UniversalChatInterface({
   };
 
   const handleStreamingResponse = async (response: Response) => {
-    console.log("[UniversalChatInterface] 📡 HANDLE STREAMING RESPONSE START");
+    console.log("[REALTIME] ⚪ HANDLE STREAMING RESPONSE START (AI MODE)");
     const reader = response.body?.getReader();
     const decoder = new TextDecoder();
 
@@ -955,7 +1348,23 @@ export function UniversalChatInterface({
               setStreamingContent("");
               if (assistantMessage) {
                 assistantMessage.content = fullContent;
-                setMessages((prev) => [...prev, assistantMessage!]);
+                console.log(
+                  "[REALTIME] ⚪ STREAMING COMPLETE - ADDING AI RESPONSE TO UI:",
+                  {
+                    messageId: assistantMessage.id,
+                    contentLength: fullContent.length,
+                    content: fullContent.substring(0, 50),
+                  }
+                );
+                setMessages((prev) => {
+                  const newMessages = [...prev, assistantMessage!];
+                  console.log("[REALTIME] ⚪ AI RESPONSE ADDED TO UI:", {
+                    messageId: assistantMessage!.id,
+                    beforeCount: prev.length,
+                    afterCount: newMessages.length,
+                  });
+                  return newMessages;
+                });
 
                 // Notify parent of received message (for localStorage updates in embed mode)
                 if (config.onMessageReceived) {
@@ -981,6 +1390,8 @@ export function UniversalChatInterface({
                   if (config.onChatCreated) {
                     config.onChatCreated(parsed.chatId);
                   }
+
+                  // Note: Auto-sent first message is now created when chat opens, not when user sends first message
                 }
               }
 
@@ -1018,6 +1429,35 @@ export function UniversalChatInterface({
                     rawParsed: parsed, // Log entire parsed object
                   }
                 );
+              }
+
+              // Check for email requirement in streaming response
+              if (parsed.isComplete && parsed.requiresEmail !== undefined) {
+                console.log(
+                  "[UniversalChatInterface] 📧 EMAIL REQUIREMENT CHECK (streaming):",
+                  {
+                    requiresEmail: parsed.requiresEmail,
+                    emailPromptMessageId: parsed.emailPromptMessageId,
+                    hasEmail,
+                    currentAwaitingEmail: awaitingEmail,
+                    isComplete: parsed.isComplete,
+                  }
+                );
+
+                if (parsed.requiresEmail && !hasEmail) {
+                  console.log(
+                    "[UniversalChatInterface] 📧 Setting awaiting email from streaming response:",
+                    {
+                      emailPromptMessageId: parsed.emailPromptMessageId,
+                      requiresEmail: parsed.requiresEmail,
+                      hasEmail,
+                    }
+                  );
+                  setAwaitingEmail(true);
+                  if (parsed.emailPromptMessageId) {
+                    setEmailPromptMessageId(parsed.emailPromptMessageId);
+                  }
+                }
               }
 
               // Escalation is always enabled - detect and set state if present
@@ -1067,7 +1507,7 @@ export function UniversalChatInterface({
   };
 
   const handleRegularResponse = async (response: Response) => {
-    console.log("[UniversalChatInterface] 📡 HANDLE REGULAR RESPONSE START");
+    console.log("[REALTIME] ⚪ HANDLE REGULAR RESPONSE START (AI MODE)");
     const data = await response.json();
 
     console.log("[UniversalChatInterface] 📦 RAW API RESPONSE (regular):", {
@@ -1075,12 +1515,17 @@ export function UniversalChatInterface({
       hasEscalationRequested: data.escalationRequested !== undefined,
       escalationRequested: data.escalationRequested,
       escalationReason: data.escalationReason,
+      requiresEmail: data.requiresEmail, // ADDED: Check for email requirement
+      emailPromptMessageId: data.emailPromptMessageId, // ADDED: Check for email prompt ID
+      responseMessageId: data.responseMessageId, // ADDED: Check for response message ID
+      chatId: data.chatId,
       fullResponse: data, // Log entire response for debugging
     });
 
     if (data.success) {
+      // Use responseMessageId from API if available (for category responses), otherwise generate one
       const assistantMessage: ChatMessage = {
-        id: `assistant_${Date.now()}`,
+        id: data.responseMessageId || `assistant_${Date.now()}`,
         role: "assistant",
         content: data.response?.content || data.response || "Response received",
         timestamp: new Date(),
@@ -1092,7 +1537,48 @@ export function UniversalChatInterface({
           escalationReason: data.escalationReason,
         },
       };
-      setMessages((prev) => [...prev, assistantMessage]);
+
+      console.log("[UniversalChatInterface] 📧 Adding assistant message:", {
+        messageId: assistantMessage.id,
+        messageIdSource: data.responseMessageId
+          ? "API (responseMessageId)"
+          : "Generated",
+        responseMessageId: data.responseMessageId,
+        messageContent: assistantMessage.content.substring(0, 100),
+        containsEmailPrompt: assistantMessage.content.includes(
+          "business email address"
+        ),
+        requiresEmail: data.requiresEmail,
+        emailPromptMessageId: data.emailPromptMessageId,
+        fullResponseData: data,
+      });
+
+      // Track responseMessageId if this is the confirmation message (before email prompt)
+      if (data.responseMessageId && data.requiresEmail) {
+        setResponseMessageId(data.responseMessageId);
+        console.log(
+          "[UniversalChatInterface] 📧 Tracking responseMessageId for hiding:",
+          {
+            responseMessageId: data.responseMessageId,
+            messageContent: assistantMessage.content.substring(0, 50),
+          }
+        );
+      }
+
+      // Note: Auto-sent first message is now created when chat opens, not when user sends first message
+      // Just add the assistant message
+      setMessages((prev) => {
+        const newMessages = [...prev, assistantMessage];
+        console.log(
+          "[UniversalChatInterface] 📧 Messages after adding assistant:",
+          {
+            totalMessages: newMessages.length,
+            lastMessageId: assistantMessage.id,
+            lastMessageContent: assistantMessage.content.substring(0, 50),
+          }
+        );
+        return newMessages;
+      });
 
       // Notify parent of received message (for localStorage updates in embed mode)
       if (config.onMessageReceived) {
@@ -1100,6 +1586,7 @@ export function UniversalChatInterface({
       }
 
       // Update chat info for new chats
+      // Note: Auto-sent first message is now created when chat opens, not when user sends first message
       if (data.chatId) {
         // Update internal chatId state
         updateChatId(data.chatId);
@@ -1111,6 +1598,71 @@ export function UniversalChatInterface({
       }
       if (data.chat) {
         setChatInfo(data.chat);
+      }
+
+      // Check if email is required
+      console.log(
+        "[UniversalChatInterface] 📧 EMAIL REQUIREMENT CHECK (regular response):",
+        {
+          requiresEmail: data.requiresEmail,
+          hasEmail,
+          emailPromptMessageId: data.emailPromptMessageId,
+          currentAwaitingEmail: awaitingEmail,
+          currentEmailPromptMessageId: emailPromptMessageId,
+          responseData: data,
+          assistantMessageId: assistantMessage.id,
+        }
+      );
+
+      if (data.requiresEmail && !hasEmail) {
+        // The API creates a separate email prompt message
+        // We need to add it to the messages array
+        if (data.emailPromptMessageId) {
+          const emailPromptMessage: ChatMessage = {
+            id: data.emailPromptMessageId,
+            role: "assistant",
+            content:
+              "In case we get disconnected, what's your business email address?",
+            timestamp: new Date(),
+          };
+
+          console.log(
+            "[UniversalChatInterface] 📧 Adding email prompt message:",
+            {
+              emailPromptMessageId: data.emailPromptMessageId,
+              emailPromptMessage,
+            }
+          );
+
+          setMessages((prev) => {
+            const newMessages = [...prev, emailPromptMessage];
+            console.log(
+              "[UniversalChatInterface] 📧 Messages after adding email prompt:",
+              {
+                totalMessages: newMessages.length,
+                emailPromptMessageId: emailPromptMessage.id,
+              }
+            );
+            return newMessages;
+          });
+        }
+
+        // Use the emailPromptMessageId from API
+        const promptMessageId =
+          data.emailPromptMessageId || assistantMessage.id;
+
+        console.log(
+          "[UniversalChatInterface] 📧 Setting awaiting email from API response:",
+          {
+            emailPromptMessageId: data.emailPromptMessageId,
+            assistantMessageId: assistantMessage.id,
+            usingPromptMessageId: promptMessageId,
+            requiresEmail: data.requiresEmail,
+            hasEmail,
+          }
+        );
+        setAwaitingEmail(true);
+        setEmailPromptMessageId(promptMessageId);
       }
 
       // Check for escalation - escalation is always enabled
@@ -1178,8 +1730,189 @@ export function UniversalChatInterface({
     }
   };
 
+  const handleEmailSubmitted = useCallback(
+    async (email: string) => {
+      console.log("[UniversalChatInterface] 📧 EMAIL SUBMITTED:", {
+        email,
+        currentChatId,
+        messagesCount: messages.length,
+        awaitingEmail,
+        emailPromptMessageId,
+      });
+
+      // Capture emailPromptMessageId before clearing it (needed for filtering)
+      const emailPromptId = emailPromptMessageId;
+
+      // Hide email form immediately
+      setHasEmail(true);
+      setAwaitingEmail(false);
+      setEmailPromptMessageId(null);
+
+      // Find the last user message before the email prompt
+      const lastUserMessage = messages
+        .slice()
+        .reverse()
+        .find((msg) => msg.role === "user");
+
+      console.log("[UniversalChatInterface] 📧 Resuming chat after email:", {
+        foundLastUserMessage: !!lastUserMessage,
+        lastUserMessageContent: lastUserMessage?.content,
+        currentChatId,
+      });
+
+      if (!lastUserMessage || !currentChatId) {
+        console.warn(
+          "[UniversalChatInterface] ⚠️ Cannot resume chat - missing lastUserMessage or currentChatId:",
+          {
+            hasLastUserMessage: !!lastUserMessage,
+            hasCurrentChatId: !!currentChatId,
+          }
+        );
+        return;
+      }
+
+      // Resume chat by calling API directly without adding user message again
+      // Use a small delay to ensure email is saved in the database
+      setTimeout(async () => {
+        try {
+          console.log(
+            "[UniversalChatInterface] 📧 Resuming chat after email submission:",
+            {
+              message: lastUserMessage.content,
+              chatId: currentChatId,
+              willNotAddUserMessage: true,
+            }
+          );
+
+          // Set loading state immediately to show typing indicator
+          setIsLoading(true);
+          setIsStreaming(false); // Start with typing indicator, then switch to streaming if enabled
+          setStreamingContent("");
+
+          // Filter out email prompt messages from conversation history
+          // Use the captured emailPromptId if available, otherwise filter by content
+          const filteredMessages = messages.filter((msg) => {
+            // Don't include email prompt messages in the conversation history
+            if (emailPromptId && msg.id === emailPromptId) {
+              return false;
+            }
+            if (
+              msg.role === "assistant" &&
+              msg.content.includes("business email address")
+            ) {
+              return false;
+            }
+            return true;
+          });
+
+          const requestBody: {
+            message: string;
+            conversationHistory: ChatMessage[];
+            stream?: boolean;
+            chatId?: string;
+            skipUserMessage?: boolean; // Flag to prevent duplicate user message creation
+          } = {
+            message: lastUserMessage.content,
+            conversationHistory: filteredMessages,
+            stream: config.features.streaming || false,
+            chatId: currentChatId,
+            skipUserMessage: true, // Don't create duplicate user message - it already exists
+          };
+
+          console.log(
+            "[UniversalChatInterface] 📧 API REQUEST (resume after email):",
+            {
+              message: lastUserMessage.content.substring(0, 50),
+              stream: requestBody.stream,
+              chatId: requestBody.chatId,
+              conversationHistoryLength: requestBody.conversationHistory.length,
+            }
+          );
+
+          const response = await fetch(`${config.apiEndpoint}`, {
+            method: config.apiMethod || "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(requestBody),
+          });
+
+          console.log(
+            "[UniversalChatInterface] 📧 API RESPONSE RECEIVED (resume after email):",
+            {
+              ok: response.ok,
+              status: response.status,
+              contentType: response.headers.get("content-type"),
+              isStreaming: response.headers
+                .get("content-type")
+                ?.includes("text/event-stream"),
+            }
+          );
+
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+
+          // Check if response is streaming
+          const contentType = response.headers.get("content-type") || "";
+          const isActuallyStreaming = contentType.includes("text/event-stream");
+
+          if (isActuallyStreaming) {
+            // Enable streaming mode - typing indicator will be replaced by streaming content
+            setIsStreaming(true);
+            await handleStreamingResponse(response);
+          } else {
+            // Regular response - typing indicator will be replaced by the response
+            setIsStreaming(false);
+            await handleRegularResponse(response);
+          }
+        } catch (error) {
+          console.error(
+            "[UniversalChatInterface] ❌ Error resuming chat after email:",
+            error
+          );
+          const errorMessage: ChatMessage = {
+            id: `error_${Date.now()}`,
+            role: "assistant",
+            content:
+              "Sorry, I encountered an error while resuming the chat. Please try again.",
+            timestamp: new Date(),
+          };
+          setMessages((prev) => [...prev, errorMessage]);
+        } finally {
+          setIsLoading(false);
+          setIsStreaming(false);
+          setStreamingContent("");
+        }
+      }, 500);
+    },
+    [
+      messages,
+      config.features.streaming,
+      config.apiEndpoint,
+      config.apiMethod,
+      currentChatId,
+      emailPromptMessageId,
+    ]
+  );
+
+  const handleCategorySelect = useCallback(
+    (category: string) => {
+      console.log("[UniversalChatInterface] Category selected:", category);
+      setSelectedCategory(category);
+      setShowCategoryList(false);
+      // Send category as a message
+      sendMessage(category, config.features.streaming || false);
+    },
+    [config.features.streaming, sendMessage]
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Don't allow sending messages if awaiting email
+    if (awaitingEmail) {
+      return;
+    }
     // Use streaming if available, otherwise use regular mode
     sendMessage(inputMessage, config.features.streaming || false);
   };
@@ -1202,7 +1935,7 @@ export function UniversalChatInterface({
 
     try {
       // Call escalation API to mark chat as escalated
-      const escalationResponse = await fetch(`${BASE_URL}/api/escalations`, {
+      const escalationResponse = await fetch(`/api/escalations`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1223,9 +1956,20 @@ export function UniversalChatInterface({
       console.log("✅ Escalation logged successfully");
 
       // Activate real-time mode
+      console.log(
+        "[REALTIME] 🔵 ESCALATION REQUESTED - ENABLING REAL-TIME MODE:",
+        {
+          chatId: config.chatId,
+          currentChatId,
+          escalationReason:
+            escalationReason || "User requested human assistance",
+        }
+      );
       setRealtimeMode(true);
 
-      console.log("✅ Real-time mode activated - waiting for agent to join");
+      console.log(
+        "[REALTIME] ✅ Real-time mode activated - waiting for agent to join"
+      );
       console.log("📡 Real-time subscription details:", {
         chatId: config.chatId,
         realtimeMode: true,
@@ -1273,7 +2017,7 @@ export function UniversalChatInterface({
     setIsSavingEdit(true);
     try {
       const response = await fetch(
-        `${BASE_URL}/api/chats/${config.chatId}/messages/${editingMessageId}`,
+        `/api/chats/${config.chatId}/messages/${editingMessageId}`,
         {
           method: "PUT",
           headers: {
@@ -1434,11 +2178,8 @@ export function UniversalChatInterface({
         <CardContent className="flex-1 flex flex-col p-0 overflow-hidden">
           {/* Messages */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 scroll-smooth">
-            {/* Combined loading state - shows when loading chat info or history */}
-            {(isLoadingHistory ||
-              (!chatInfo &&
-                messages.length === 0 &&
-                config.type !== "traditional")) && (
+            {/* Loading state - show when fetching previous chats */}
+            {isLoadingHistory && messages.length === 0 && (
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <BarLoader
                   color="#000"
@@ -1446,6 +2187,9 @@ export function UniversalChatInterface({
                   width={100}
                   className="mb-4"
                 />
+                <p className="text-sm text-muted-foreground mt-2">
+                  Loading chat...
+                </p>
               </div>
             )}
 
@@ -1466,326 +2210,576 @@ export function UniversalChatInterface({
                 </div>
               )}
 
-            {messages.map((message, index) => {
-              // Check for handoff message in traditional chat
-              const isHandoffMessage =
-                config.type === "traditional" &&
-                message.role === "assistant" &&
-                index > 0 &&
-                chatInfo?.escalationRequested &&
-                chatInfo?.assignedAt &&
-                new Date(message.timestamp) >= new Date(chatInfo.assignedAt) &&
-                !messages.slice(0, index).some((m) => m.role === "assistant");
-
-              // Determine if this message is from the current user
-              // Use userId comparison if available, otherwise fall back to role-based logic
-              const isOwnMessage =
-                config.currentUserId && message.userId
-                  ? message.userId === config.currentUserId
-                  : config.features.supportView
-                  ? // In support view, only post-assignment assistant messages are "own"
-                    message.role === "assistant" &&
-                    chatInfo?.assignedAt &&
-                    new Date(message.timestamp) >= new Date(chatInfo.assignedAt)
-                  : message.role === "user"; // In customer view, user messages are "own"
-
-              // Determine if this message can be edited (support rep messages in support view)
-              // Only assistant messages sent after chat assignment can be edited
-              const isEditable =
-                config.features.supportView &&
-                config.type === "traditional" &&
-                message.role === "assistant" &&
-                chatInfo?.assignedAt &&
-                new Date(message.timestamp) >= new Date(chatInfo.assignedAt);
-
-              const isEditing = editingMessageId === message.id;
-
-              return (
-                <div key={message.id}>
-                  {/* Handoff banner */}
-                  {isHandoffMessage && (
-                    <div className="flex items-center justify-center py-4">
-                      <div className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-full">
-                        <PhoneCall className="h-4 w-4 text-green-600 dark:text-green-400" />
-                        <span className="text-sm font-medium text-green-600 dark:text-green-100">
-                          Chat transferred to human support
-                        </span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div
-                    className={`flex gap-3 ${
-                      isOwnMessage ? "justify-end" : "justify-start"
-                    }`}
-                  >
-                    {/* Avatar for other people's messages (not own messages) */}
-                    {!isOwnMessage && message.role !== "system" && (
-                      <div className="flex-shrink-0">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          {message.role === "assistant" ||
-                          message.role === "agent" ? (
-                            <Bot className="h-4 w-4 text-primary" />
-                          ) : (
-                            <User className="h-4 w-4 text-primary" />
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-col gap-1 max-w-[80%]">
-                      {/* Sender label for traditional chat */}
-                      {config.type === "traditional" && (
-                        <span
-                          className={`text-xs text-muted-foreground px-1 ${
-                            isOwnMessage ? "text-right" : "text-left"
-                          }`}
+            {/* Category Selection UI - only show when no messages and category list should be shown */}
+            {showCategoryList &&
+              !isLoadingHistory &&
+              messages.length === 0 &&
+              config.chatbotConfig?.categorySubjects &&
+              config.chatbotConfig.categorySubjects.length > 0 && (
+                <div className="space-y-3">
+                  <p className="text-sm font-medium text-center">
+                    How can we help you today?
+                  </p>
+                  <div className="grid grid-cols-1 gap-2">
+                    {config.chatbotConfig.categorySubjects.map(
+                      (category, index) => (
+                        <Button
+                          key={index}
+                          variant="outline"
+                          className="w-full justify-start text-left h-auto py-3 px-4"
+                          onClick={() => handleCategorySelect(category)}
                         >
-                          {(() => {
-                            // Determine sender label based on role and context
-                            if (isOwnMessage) {
-                              return "You";
-                            }
-
-                            // For customer messages
-                            if (message.role === "user") {
-                              return config.features.supportView
-                                ? "Customer"
-                                : "You";
-                            }
-
-                            // For AI agent/bot messages
-                            if (message.role === "agent") {
-                              return "AI Agent";
-                            }
-
-                            // For assistant messages - distinguish between bot and human agent
-                            if (message.role === "assistant") {
-                              // If chat is assigned and message is after assignment, it's from human agent
-                              if (
-                                chatInfo?.assignedAt &&
-                                new Date(message.timestamp) >=
-                                  new Date(chatInfo.assignedAt)
-                              ) {
-                                return (
-                                  chatInfo?.assignedTo?.name || "Support Agent"
-                                );
-                              }
-                              // Otherwise it's from the AI bot
-                              return "AI Assistant";
-                            }
-
-                            // System messages
-                            return "System";
-                          })()}
-                        </span>
-                      )}
-
-                      <div
-                        className={`rounded-lg px-3 py-2 relative group ${
-                          isOwnMessage
-                            ? "bg-primary text-primary-foreground"
-                            : message.role === "system"
-                            ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
-                            : message.role === "agent"
-                            ? "bg-blue-600 text-white"
-                            : "bg-muted"
-                        }`}
-                      >
-                        {/* Edit icon for support rep messages */}
-                        {isEditable && !isEditing && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className={`absolute top-[6px] right-[-15px] h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity ${
-                              isOwnMessage
-                                ? "hover:bg-primary-foreground/20 text-primary-foreground"
-                                : "hover:bg-background/20"
-                            }`}
-                            onClick={() => handleStartEdit(message)}
-                            title="Edit message"
-                          >
-                            <Edit className="h-3 w-3" />
-                          </Button>
-                        )}
-
-                        {isEditing ? (
-                          <div className="space-y-2">
-                            <textarea
-                              value={editingContent}
-                              onChange={(e) =>
-                                setEditingContent(e.target.value)
-                              }
-                              className="w-full text-sm bg-background text-foreground border border-border rounded-md px-2 py-1 min-h-[60px] resize-none"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Escape") {
-                                  handleCancelEdit();
-                                } else if (
-                                  e.key === "Enter" &&
-                                  (e.metaKey || e.ctrlKey)
-                                ) {
-                                  e.preventDefault();
-                                  handleSaveEdit();
-                                }
-                              }}
-                            />
-                            <div className="flex items-center gap-2 justify-end">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleCancelEdit}
-                                disabled={isSavingEdit}
-                                className="h-7 text-xs"
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                size="sm"
-                                onClick={handleSaveEdit}
-                                disabled={
-                                  isSavingEdit || !editingContent.trim()
-                                }
-                                className="h-7 text-xs"
-                              >
-                                <Save className="h-3 w-3 mr-1" />
-                                {isSavingEdit ? "Saving..." : "Save"}
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          <p className="text-sm whitespace-pre-wrap">
-                            {message.content}
-                          </p>
-                        )}
-
-                        {/* Debug mode - show raw response */}
-                        {config.features.debugMode &&
-                          debugMode &&
-                          message.metadata?.rawResponse && (
-                            <div className="mt-2 pt-2 border-t border-border/50">
-                              <div className="flex items-center gap-2 mb-2">
-                                <Bug className="h-3 w-3 text-orange-500" />
-                                <p className="text-xs font-medium text-orange-600">
-                                  Debug Data
-                                </p>
-                              </div>
-                              <div className="bg-gray-50 dark:bg-gray-800 rounded p-2 text-xs font-mono overflow-x-auto">
-                                <pre className="whitespace-pre-wrap">
-                                  {JSON.stringify(
-                                    message.metadata.rawResponse,
-                                    null,
-                                    2
-                                  )}
-                                </pre>
-                              </div>
-                            </div>
-                          )}
-
-                        {/* Sources */}
-                        {config.features.showSources &&
-                          message.metadata?.sources &&
-                          message.metadata.sources.length > 0 && (
-                            <div className="mt-2 pt-2 border-t border-border/50">
-                              <p className="text-xs text-muted-foreground mb-1">
-                                Sources:
-                              </p>
-                              <div className="space-y-1">
-                                {message.metadata.sources.map(
-                                  (source, index) => {
-                                    const SourceIcon = getSourceIcon(
-                                      source.type
-                                    );
-                                    return (
-                                      <div
-                                        key={index}
-                                        className="flex items-center gap-2 text-xs"
-                                      >
-                                        <SourceIcon className="h-3 w-3" />
-                                        <span className="truncate">
-                                          {source.title}
-                                        </span>
-                                        <Badge
-                                          variant="secondary"
-                                          className="text-xs"
-                                        >
-                                          {getSourceLabel(source.type)}
-                                        </Badge>
-                                        <Badge
-                                          variant="outline"
-                                          className="text-xs"
-                                        >
-                                          {(source.score * 100).toFixed(0)}%
-                                        </Badge>
-                                      </div>
-                                    );
-                                  }
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                        {/* Tokens used */}
-                        {config.features.showTokens &&
-                          message.metadata?.tokensUsed && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              Tokens used: {message.metadata.tokensUsed}
-                            </p>
-                          )}
-
-                        {/* Message metadata for traditional chat */}
-                        {config.type === "traditional" && message.metadata && (
-                          <div className="flex items-center gap-2 mt-2 text-xs">
-                            {config.features.showStatus &&
-                              message.metadata.status && (
-                                <div className="flex items-center gap-1">
-                                  {getStatusIcon(message.metadata.status)}
-                                  <span className="capitalize">
-                                    {message.metadata.status}
-                                  </span>
-                                </div>
-                              )}
-                            {config.features.showPriority &&
-                              message.metadata.priority && (
-                                <Badge variant="outline" className="text-xs">
-                                  {message.metadata.priority}
-                                </Badge>
-                              )}
-                            {config.features.showAssignedTo &&
-                              message.metadata.assignedTo && (
-                                <span className="text-muted-foreground">
-                                  Assigned to: {message.metadata.assignedTo}
-                                </span>
-                              )}
-                          </div>
-                        )}
-
-                        <p
-                          className={`text-xs mt-1 ${
-                            message.role === "agent"
-                              ? "text-blue-100"
-                              : message.role === "assistant"
-                              ? "text-gray-400"
-                              : "opacity-70"
-                          }`}
-                        >
-                          {message.timestamp.toLocaleTimeString()}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Avatar for own messages */}
-                    {isOwnMessage && (
-                      <div className="flex-shrink-0">
-                        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
-                          <User className="h-4 w-4 text-primary-foreground" />
-                        </div>
-                      </div>
+                          {category}
+                        </Button>
+                      )
                     )}
                   </div>
                 </div>
+              )}
+
+            {(() => {
+              // Filter messages to hide when email is submitted
+              console.log(
+                "[UniversalChatInterface] 🔍 MESSAGE FILTERING START:",
+                {
+                  hasEmail,
+                  awaitingEmail,
+                  emailPromptMessageId,
+                  totalMessages: messages.length,
+                  hideEmailPromptMessages:
+                    config.chatbotConfig?.hideEmailPromptMessages ?? 2,
+                }
               );
-            })}
+              const hideEmailPromptMessages =
+                config.chatbotConfig?.hideEmailPromptMessages ?? 2; // Default: hide 2 messages
+              const messagesToHide = new Set<string>();
+
+              if (hasEmail) {
+                console.log(
+                  "[UniversalChatInterface] ✅ hasEmail is TRUE - will hide messages"
+                );
+                // Find the email prompt message (by ID or by content)
+                let emailPromptIndex = -1;
+                if (emailPromptMessageId) {
+                  emailPromptIndex = messages.findIndex(
+                    (msg) => msg.id === emailPromptMessageId
+                  );
+                  console.log(
+                    "[UniversalChatInterface] 🔍 Found email prompt by ID:",
+                    {
+                      emailPromptMessageId,
+                      emailPromptIndex,
+                      found: emailPromptIndex >= 0,
+                    }
+                  );
+                }
+                // Fallback: find by content
+                if (emailPromptIndex === -1) {
+                  emailPromptIndex = messages.findIndex(
+                    (msg) =>
+                      msg.role === "assistant" &&
+                      msg.content.includes("business email address")
+                  );
+                  console.log(
+                    "[UniversalChatInterface] 🔍 Found email prompt by content:",
+                    {
+                      emailPromptIndex,
+                      found: emailPromptIndex >= 0,
+                    }
+                  );
+                }
+
+                if (emailPromptIndex >= 0) {
+                  console.log(
+                    "[UniversalChatInterface] 📧 Starting to hide messages:",
+                    {
+                      emailPromptIndex,
+                      hideEmailPromptMessages,
+                      messageAtPromptIndex: messages[
+                        emailPromptIndex
+                      ]?.content?.substring(0, 50),
+                    }
+                  );
+                  // Hide messages starting from the email prompt and going backwards
+                  let hiddenCount = 0;
+                  for (
+                    let i = emailPromptIndex;
+                    i >= 0 && hiddenCount < hideEmailPromptMessages;
+                    i--
+                  ) {
+                    const msg = messages[i];
+                    console.log(
+                      `[UniversalChatInterface] 🔍 Checking message at index ${i}:`,
+                      {
+                        messageId: msg.id,
+                        role: msg.role,
+                        content: msg.content.substring(0, 50),
+                        willHide: msg.role === "assistant",
+                        hiddenCount,
+                        targetCount: hideEmailPromptMessages,
+                      }
+                    );
+                    // Only hide assistant messages (not user messages)
+                    if (msg.role === "assistant") {
+                      messagesToHide.add(msg.id);
+                      hiddenCount++;
+                      console.log(
+                        `[UniversalChatInterface] ✅ Added message to hide:`,
+                        {
+                          messageId: msg.id,
+                          hiddenCount,
+                        }
+                      );
+                    }
+                  }
+
+                  console.log(
+                    "[UniversalChatInterface] 📧 Hiding messages after email submission:",
+                    {
+                      emailPromptIndex,
+                      hideEmailPromptMessages,
+                      hiddenCount,
+                      messagesToHide: Array.from(messagesToHide),
+                      totalMessages: messages.length,
+                      messageIdsToHide: Array.from(messagesToHide),
+                    }
+                  );
+                } else {
+                  console.log(
+                    "[UniversalChatInterface] ⚠️ Could not find email prompt message to hide"
+                  );
+                }
+              } else {
+                console.log(
+                  "[UniversalChatInterface] ⚠️ hasEmail is FALSE - will NOT hide messages",
+                  {
+                    hasEmail,
+                    awaitingEmail,
+                  }
+                );
+              }
+
+              // Filter out messages to hide
+              const filteredMessages = messages.filter(
+                (msg) => !messagesToHide.has(msg.id)
+              );
+              console.log(
+                "[UniversalChatInterface] 📊 MESSAGE FILTERING RESULT:",
+                {
+                  originalCount: messages.length,
+                  filteredCount: filteredMessages.length,
+                  hiddenCount: messagesToHide.size,
+                  messagesToHide: Array.from(messagesToHide),
+                }
+              );
+
+              return filteredMessages.map((message, index) => {
+                // Check for handoff message in traditional chat
+                const isHandoffMessage =
+                  config.type === "traditional" &&
+                  message.role === "assistant" &&
+                  index > 0 &&
+                  chatInfo?.escalationRequested &&
+                  chatInfo?.assignedAt &&
+                  new Date(message.timestamp) >=
+                    new Date(chatInfo.assignedAt) &&
+                  !filteredMessages
+                    .slice(0, index)
+                    .some((m) => m.role === "assistant");
+
+                // Determine if this message is from the current user
+                // Use userId comparison if available, otherwise fall back to role-based logic
+                const isOwnMessage =
+                  config.currentUserId && message.userId
+                    ? message.userId === config.currentUserId
+                    : config.features.supportView
+                    ? // In support view, only post-assignment assistant messages are "own"
+                      message.role === "assistant" &&
+                      chatInfo?.assignedAt &&
+                      new Date(message.timestamp) >=
+                        new Date(chatInfo.assignedAt)
+                    : message.role === "user"; // In customer view, user messages are "own"
+
+                // Determine if this message can be edited (support rep messages in support view)
+                // Only assistant messages sent after chat assignment can be edited
+                const isEditable =
+                  config.features.supportView &&
+                  config.type === "traditional" &&
+                  message.role === "assistant" &&
+                  chatInfo?.assignedAt &&
+                  new Date(message.timestamp) >= new Date(chatInfo.assignedAt);
+
+                const isEditing = editingMessageId === message.id;
+
+                // Filter system messages based on visibility rules
+                // System messages with agentOnly: true are only visible in support view
+                if (
+                  message.role === "system" &&
+                  message.metadata?.agentOnly === true &&
+                  !config.features.supportView
+                ) {
+                  return null; // Don't render agent-only system messages in customer view
+                }
+
+                return (
+                  <div key={message.id}>
+                    {/* Handoff banner */}
+                    {isHandoffMessage && (
+                      <div className="flex items-center justify-center py-4">
+                        <div className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-full">
+                          <PhoneCall className="h-4 w-4 text-green-600 dark:text-green-400" />
+                          <span className="text-sm font-medium text-green-600 dark:text-green-100">
+                            Chat transferred to human support
+                          </span>
+                        </div>
+                      </div>
+                    )}
+
+                    <div
+                      className={`flex gap-3 ${
+                        isOwnMessage ? "justify-end" : "justify-start"
+                      }`}
+                    >
+                      {/* Avatar for other people's messages (not own messages) */}
+                      {!isOwnMessage && message.role !== "system" && (
+                        <div className="flex-shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            {message.role === "assistant" ||
+                            message.role === "agent" ? (
+                              <Bot className="h-4 w-4 text-primary" />
+                            ) : (
+                              <User className="h-4 w-4 text-primary" />
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex flex-col gap-1 max-w-[80%]">
+                        {/* Sender label for traditional chat */}
+                        {config.type === "traditional" && (
+                          <span
+                            className={`text-xs text-muted-foreground px-1 ${
+                              isOwnMessage ? "text-right" : "text-left"
+                            }`}
+                          >
+                            {(() => {
+                              // Determine sender label based on role and context
+                              if (isOwnMessage) {
+                                return "You";
+                              }
+
+                              // For customer messages
+                              if (message.role === "user") {
+                                return config.features.supportView
+                                  ? "Customer"
+                                  : "You";
+                              }
+
+                              // For AI agent/bot messages
+                              if (message.role === "agent") {
+                                return "AI Agent";
+                              }
+
+                              // For assistant messages - distinguish between bot and human agent
+                              if (message.role === "assistant") {
+                                // If chat is assigned and message is after assignment, it's from human agent
+                                if (
+                                  chatInfo?.assignedAt &&
+                                  new Date(message.timestamp) >=
+                                    new Date(chatInfo.assignedAt)
+                                ) {
+                                  return (
+                                    chatInfo?.assignedTo?.name ||
+                                    "Support Agent"
+                                  );
+                                }
+                                // Otherwise it's from the AI bot
+                                return "AI Assistant";
+                              }
+
+                              // System messages
+                              return "System";
+                            })()}
+                          </span>
+                        )}
+
+                        <div
+                          className={`rounded-lg px-3 py-2 relative group ${
+                            isOwnMessage
+                              ? "bg-primary text-primary-foreground"
+                              : message.role === "system"
+                              ? "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200"
+                              : message.role === "agent"
+                              ? "bg-blue-600 text-white"
+                              : "bg-muted"
+                          }`}
+                        >
+                          {/* Edit icon for support rep messages */}
+                          {isEditable && !isEditing && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className={`absolute top-[6px] right-[-15px] h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity ${
+                                isOwnMessage
+                                  ? "hover:bg-primary-foreground/20 text-primary-foreground"
+                                  : "hover:bg-background/20"
+                              }`}
+                              onClick={() => handleStartEdit(message)}
+                              title="Edit message"
+                            >
+                              <Edit className="h-3 w-3" />
+                            </Button>
+                          )}
+
+                          {isEditing ? (
+                            <div className="space-y-2">
+                              <textarea
+                                value={editingContent}
+                                onChange={(e) =>
+                                  setEditingContent(e.target.value)
+                                }
+                                className="w-full text-sm bg-background text-foreground border border-border rounded-md px-2 py-1 min-h-[60px] resize-none"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === "Escape") {
+                                    handleCancelEdit();
+                                  } else if (
+                                    e.key === "Enter" &&
+                                    (e.metaKey || e.ctrlKey)
+                                  ) {
+                                    e.preventDefault();
+                                    handleSaveEdit();
+                                  }
+                                }}
+                              />
+                              <div className="flex items-center gap-2 justify-end">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={handleCancelEdit}
+                                  disabled={isSavingEdit}
+                                  className="h-7 text-xs"
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  onClick={handleSaveEdit}
+                                  disabled={
+                                    isSavingEdit || !editingContent.trim()
+                                  }
+                                  className="h-7 text-xs"
+                                >
+                                  <Save className="h-3 w-3 mr-1" />
+                                  {isSavingEdit ? "Saving..." : "Save"}
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm whitespace-pre-wrap">
+                              {message.content}
+                            </p>
+                          )}
+
+                          {/* Email Form - show after email prompt message */}
+                          {(() => {
+                            // Check if this message is the email prompt message
+                            // Match by ID if available, or by content if ID doesn't match
+                            const isEmailPromptMessage =
+                              emailPromptMessageId === message.id ||
+                              (message.role === "assistant" &&
+                                message.content.includes(
+                                  "business email address"
+                                ));
+
+                            // Don't show form if email already submitted OR if awaitingEmail is false
+                            const shouldShowEmailForm =
+                              !hasEmail && // Don't show form if email already submitted
+                              awaitingEmail &&
+                              isEmailPromptMessage &&
+                              currentChatId;
+
+                            console.log(
+                              "[UniversalChatInterface] 📧 EMAIL FORM RENDER CHECK:",
+                              {
+                                messageId: message.id,
+                                messageRole: message.role,
+                                messageContent: message.content.substring(
+                                  0,
+                                  50
+                                ),
+                                awaitingEmail,
+                                hasEmail,
+                                emailPromptMessageId,
+                                currentChatId,
+                                messageIdMatches:
+                                  emailPromptMessageId === message.id,
+                                isEmailPromptByContent:
+                                  message.role === "assistant" &&
+                                  message.content.includes(
+                                    "business email address"
+                                  ),
+                                isEmailPromptMessage,
+                                hasCurrentChatId: !!currentChatId,
+                                conditionChecks: {
+                                  notHasEmail: !hasEmail,
+                                  awaitingEmail: awaitingEmail,
+                                  isEmailPromptMessage: isEmailPromptMessage,
+                                  hasCurrentChatId: !!currentChatId,
+                                },
+                                shouldShowEmailForm,
+                                willShowForm: shouldShowEmailForm,
+                              }
+                            );
+
+                            return shouldShowEmailForm ? (
+                              <div className="mt-3">
+                                <EmailForm
+                                  chatId={currentChatId}
+                                  onEmailSubmitted={handleEmailSubmitted}
+                                  onError={(error) => {
+                                    console.error(
+                                      "[UniversalChatInterface] Email submission error:",
+                                      error
+                                    );
+                                  }}
+                                />
+                              </div>
+                            ) : null;
+                          })()}
+
+                          {/* Debug mode - show raw response */}
+                          {config.features.debugMode &&
+                            debugMode &&
+                            message.metadata?.rawResponse && (
+                              <div className="mt-2 pt-2 border-t border-border/50">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Bug className="h-3 w-3 text-orange-500" />
+                                  <p className="text-xs font-medium text-orange-600">
+                                    Debug Data
+                                  </p>
+                                </div>
+                                <div className="bg-gray-50 dark:bg-gray-800 rounded p-2 text-xs font-mono overflow-x-auto">
+                                  <pre className="whitespace-pre-wrap">
+                                    {JSON.stringify(
+                                      message.metadata.rawResponse,
+                                      null,
+                                      2
+                                    )}
+                                  </pre>
+                                </div>
+                              </div>
+                            )}
+
+                          {/* Sources */}
+                          {config.features.showSources &&
+                            message.metadata?.sources &&
+                            message.metadata.sources.length > 0 && (
+                              <div className="mt-2 pt-2 border-t border-border/50">
+                                <p className="text-xs text-muted-foreground mb-1">
+                                  Sources:
+                                </p>
+                                <div className="space-y-1">
+                                  {message.metadata.sources.map(
+                                    (source, index) => {
+                                      const SourceIcon = getSourceIcon(
+                                        source.type
+                                      );
+                                      return (
+                                        <div
+                                          key={index}
+                                          className="flex items-center gap-2 text-xs"
+                                        >
+                                          <SourceIcon className="h-3 w-3" />
+                                          <span className="truncate">
+                                            {source.title}
+                                          </span>
+                                          <Badge
+                                            variant="secondary"
+                                            className="text-xs"
+                                          >
+                                            {getSourceLabel(source.type)}
+                                          </Badge>
+                                          <Badge
+                                            variant="outline"
+                                            className="text-xs"
+                                          >
+                                            {(source.score * 100).toFixed(0)}%
+                                          </Badge>
+                                        </div>
+                                      );
+                                    }
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                          {/* Tokens used */}
+                          {config.features.showTokens &&
+                            message.metadata?.tokensUsed && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Tokens used: {message.metadata.tokensUsed}
+                              </p>
+                            )}
+
+                          {/* Message metadata for traditional chat */}
+                          {config.type === "traditional" &&
+                            message.metadata && (
+                              <div className="flex items-center gap-2 mt-2 text-xs">
+                                {config.features.showStatus &&
+                                  message.metadata.status && (
+                                    <div className="flex items-center gap-1">
+                                      {getStatusIcon(message.metadata.status)}
+                                      <span className="capitalize">
+                                        {message.metadata.status}
+                                      </span>
+                                    </div>
+                                  )}
+                                {config.features.showPriority &&
+                                  message.metadata.priority && (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-xs"
+                                    >
+                                      {message.metadata.priority}
+                                    </Badge>
+                                  )}
+                                {config.features.showAssignedTo &&
+                                  message.metadata.assignedTo && (
+                                    <span className="text-muted-foreground">
+                                      Assigned to: {message.metadata.assignedTo}
+                                    </span>
+                                  )}
+                              </div>
+                            )}
+
+                          <p
+                            className={`text-xs mt-1 ${
+                              message.role === "agent"
+                                ? "text-blue-100"
+                                : message.role === "assistant"
+                                ? "text-gray-400"
+                                : "opacity-70"
+                            }`}
+                          >
+                            {message.timestamp.toLocaleTimeString()}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Avatar for own messages */}
+                      {isOwnMessage && (
+                        <div className="flex-shrink-0">
+                          <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center">
+                            <User className="h-4 w-4 text-primary-foreground" />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
 
             {/* Streaming message (only show for AI, not after escalation) */}
             {isStreaming && streamingContent && !escalationActivated && (
@@ -1804,10 +2798,12 @@ export function UniversalChatInterface({
               </div>
             )}
 
-            {/* Typing indicator (only show for AI, not after escalation) */}
-            {isLoading && !isStreaming && !escalationActivated && (
-              <TypingIndicator />
-            )}
+            {/* Typing indicator - show whenever waiting for AI assistant response */}
+            {/* Show when loading, but hide if we already have streaming content to display */}
+            {isLoading &&
+              (!isStreaming || !streamingContent) &&
+              !escalationActivated &&
+              !isLoadingHistory && <TypingIndicator />}
 
             <div ref={messagesEndRef} />
           </div>
@@ -1872,7 +2868,9 @@ export function UniversalChatInterface({
                   setInputMessage(e.target.value);
                 }}
                 placeholder={
-                  escalationActivated
+                  awaitingEmail
+                    ? "Please provide your email address above..."
+                    : escalationActivated
                     ? "Message customer support..."
                     : config.placeholder || "Type your message..."
                 }
@@ -1883,10 +2881,11 @@ export function UniversalChatInterface({
                 spellCheck="false"
                 name="chat-message"
                 rows={1}
+                disabled={awaitingEmail || isLoading}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    if (inputMessage.trim() && !isLoading) {
+                    if (inputMessage.trim() && !isLoading && !awaitingEmail) {
                       sendMessage(
                         inputMessage,
                         config.features.streaming || false
@@ -1900,7 +2899,7 @@ export function UniversalChatInterface({
               />
               <Button
                 type="submit"
-                disabled={isLoading || !inputMessage.trim()}
+                disabled={isLoading || !inputMessage.trim() || awaitingEmail}
                 className="px-4 bg-black text-white h-[40px] flex-shrink-0"
               >
                 Send

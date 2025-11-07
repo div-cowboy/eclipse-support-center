@@ -32,11 +32,28 @@ export async function GET(
     // Check if chatbot allows embedding (you might want to add this field to your schema)
     // For now, we'll allow all active chatbots to be embedded
 
+    // Extract config with type safety
+    const config = chatbot.config as {
+      chatStartType?: "AI_ASSISTANT" | "HUMAN" | "CATEGORY_SELECT";
+      customerEmailRequired?: boolean;
+      staticMessage?: string;
+      categorySubjects?: string[];
+    } | null;
+
     return NextResponse.json({
       id: chatbot.id,
       name: chatbot.name,
       description: chatbot.description,
       organization: chatbot.organization,
+      config: {
+        chatStartType: config?.chatStartType || "AI_ASSISTANT",
+        customerEmailRequired:
+          config?.customerEmailRequired !== undefined
+            ? config.customerEmailRequired
+            : true,
+        staticMessage: config?.staticMessage,
+        categorySubjects: config?.categorySubjects || [],
+      },
     });
   } catch (error) {
     console.error("Error getting chatbot info:", error);

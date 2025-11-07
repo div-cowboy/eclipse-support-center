@@ -120,9 +120,11 @@ export function useWebSocketChat({
   // Connect to WebSocket server
   useEffect(() => {
     if (!enabled || !chatId) {
-      console.log(`[useWebSocketChat] Not connecting`, { enabled, chatId });
+      console.log(`[REALTIME] ⚪ NOT CONNECTING:`, { enabled, chatId });
       return;
     }
+    
+    console.log(`[REALTIME] 🔵 INITIATING CONNECTION:`, { chatId, enabled });
 
     let isMounted = true;
 
@@ -155,7 +157,7 @@ export function useWebSocketChat({
           setError(null);
           reconnectAttempts.current = 0;
 
-          console.log(`[useWebSocketChat] ✅ Connected to chat:${chatId}`);
+          console.log(`[REALTIME] ✅ WEBSOCKET CONNECTED:`, { chatId, wsUrl });
           onConnectedRef.current?.();
         };
 
@@ -165,9 +167,11 @@ export function useWebSocketChat({
           try {
             const message = JSON.parse(event.data);
 
-            console.log(`[useWebSocketChat] Received message:`, {
+            console.log(`[REALTIME] 🟢 WEBSOCKET MESSAGE RECEIVED:`, {
               type: message.type,
               chatId,
+              hasData: !!message.data,
+              dataKeys: message.data ? Object.keys(message.data) : [],
             });
 
             switch (message.type) {
@@ -178,13 +182,32 @@ export function useWebSocketChat({
                 break;
 
               case "message":
+                console.log(`[REALTIME] 🟢 PROCESSING MESSAGE TYPE:`, {
+                  messageId: message.data?.id,
+                  role: message.data?.role,
+                  content: message.data?.content?.substring(0, 50),
+                  hasCallback: !!onMessageRef.current,
+                });
+                
                 if (onMessageRef.current && message.data) {
-                  onMessageRef.current({
+                  const chatMessage = {
                     id: message.data.id,
                     content: message.data.content,
                     role: message.data.role,
                     timestamp: new Date(message.data.timestamp),
                     sender: message.data.sender,
+                  };
+                  
+                  console.log(`[REALTIME] 🟢 CALLING onMessage CALLBACK:`, {
+                    messageId: chatMessage.id,
+                    role: chatMessage.role,
+                  });
+                  
+                  onMessageRef.current(chatMessage);
+                } else {
+                  console.warn(`[REALTIME] ⚠️ No onMessage callback or missing data:`, {
+                    hasCallback: !!onMessageRef.current,
+                    hasData: !!message.data,
                   });
                 }
                 break;
@@ -342,11 +365,20 @@ export function useWebSocketChat({
           role,
         };
 
-        console.log(`[useWebSocketChat] Sending message:`, {
+        console.log(`[REALTIME] 🔵 SENDING VIA WEBSOCKET:`, {
           role,
+          content: content.substring(0, 50),
           length: content.length,
+          wsState: wsRef.current?.readyState,
+          wsStateName: wsRef.current?.readyState === WebSocket.OPEN ? "OPEN" : 
+                      wsRef.current?.readyState === WebSocket.CONNECTING ? "CONNECTING" :
+                      wsRef.current?.readyState === WebSocket.CLOSING ? "CLOSING" :
+                      wsRef.current?.readyState === WebSocket.CLOSED ? "CLOSED" : "UNKNOWN",
         });
+        
         wsRef.current.send(JSON.stringify(message));
+        
+        console.log(`[REALTIME] ✅ MESSAGE SENT VIA WEBSOCKET`);
         return true;
       } catch (err) {
         console.error("[useWebSocketChat] Error sending message:", err);

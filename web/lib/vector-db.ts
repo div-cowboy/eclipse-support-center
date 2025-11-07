@@ -57,9 +57,12 @@ export class PineconeVectorDB implements VectorDatabase {
     topK: number = 10,
     filter?: Record<string, unknown>
   ): Promise<VectorSearchResult[]> {
+    // Ensure topK is a valid integer
+    const validTopK = Number.isInteger(topK) && topK > 0 ? Math.floor(topK) : 10;
+    
     const searchRequest = {
       vector: query,
-      topK,
+      topK: validTopK,
       includeMetadata: true,
       ...(filter && { filter }),
     };

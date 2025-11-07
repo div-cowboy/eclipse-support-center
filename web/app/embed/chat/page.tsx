@@ -38,6 +38,12 @@ function EmbedChatContent() {
   const [chatbotInfo, setChatbotInfo] = useState<{
     name?: string;
     description?: string;
+    config?: {
+      chatStartType?: "AI_ASSISTANT" | "HUMAN" | "CATEGORY_SELECT";
+      customerEmailRequired?: boolean;
+      staticMessage?: string;
+      categorySubjects?: string[];
+    };
     [key: string]: unknown;
   } | null>(null);
   const [storageAvailable, setStorageAvailable] = useState(false);
@@ -323,7 +329,20 @@ function EmbedChatContent() {
       welcomeMessage: config.welcomeMessage,
       chatbotId: config.chatbotId,
       view,
+      chatbotConfig: chatbotInfo?.config,
     });
+
+    // Determine autoSendFirstMessage based on chatStartType
+    let autoSendFirstMessage = config.autoSendFirstMessage;
+    if (
+      chatbotInfo?.config?.chatStartType === "AI_ASSISTANT" ||
+      chatbotInfo?.config?.chatStartType === "HUMAN"
+    ) {
+      // Use static message from chatbot config if available
+      if (chatbotInfo.config.staticMessage) {
+        autoSendFirstMessage = chatbotInfo.config.staticMessage;
+      }
+    }
 
     return {
       apiEndpoint: `/api/embed/chatbots/${config.chatbotId}/chat`,
@@ -336,7 +355,7 @@ function EmbedChatContent() {
         ? "Message support agent..."
         : config.placeholder,
       welcomeMessage: config.welcomeMessage,
-      autoSendFirstMessage: config.autoSendFirstMessage,
+      autoSendFirstMessage: autoSendFirstMessage,
       height: config.height,
       className: "h-full border-0 shadow-none",
       features: {
@@ -355,6 +374,8 @@ function EmbedChatContent() {
         fontSize: config.fontSize,
         customCSS: config.customCSS,
       },
+      // Pass chatbot config to UniversalChatInterface
+      chatbotConfig: chatbotInfo?.config,
       onChatCreated: handleChatCreated,
       onEscalationRequested: handleEscalationRequested,
       onMessageSent: handleMessageSent,
@@ -378,6 +399,7 @@ function EmbedChatContent() {
     config.showBranding,
     chatbotInfo?.name,
     chatbotInfo?.description,
+    chatbotInfo?.config,
     storageAvailable,
     handleChatCreated,
     handleEscalationRequested,

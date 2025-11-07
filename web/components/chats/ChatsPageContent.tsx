@@ -458,18 +458,17 @@ export function ChatsPageContent() {
           const chat = row.original;
           return (
             <div className="text-right" onClick={(e) => e.stopPropagation()}>
-              <DropdownMenu>
+              <DropdownMenu className="relative bg-white">
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="h-8 w-8 p-0">
                     <span className="sr-only">Open menu</span>
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end" className="bg-white">
                   <DropdownMenuLabel>Actions</DropdownMenuLabel>
                   <DropdownMenuItem onClick={() => handleViewChat(chat.id)}>
-                    <Eye className="h-4 w-4 mr-2" />
-                    View Chat
+                    View
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>Archive</DropdownMenuItem>
@@ -804,4 +803,3 @@ export function ChatsPageContent() {
     </div>
   );
 }
-
